@@ -13,6 +13,8 @@
 - `index.html` is the standalone offline app and the Pages root.
 - Release asset `webcarrot-offline-demo-fms.html` must be byte-identical to `index.html`.
 - App version starts at `1.0.0`, independently of the official-source demo. The in-app update check points only to the FMS repository.
+- Published v1.0.0 at `https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/tag/v1.0.0`; Pages is `https://fullmetalsonic.github.io/webcarrot-offline-demo-fms/`.
+- At publication, Pages and the Release HTML both returned HTTP 200 and matched local `index.html` byte for byte (SHA-256 `26a5c2a7a313502e3b20e57a98bcc74424b5d27f94c7c5bf2637a9e528492890`). The latest stable Release API returned v1.0.0 with CORS `*`.
 - Preserve unknown imported keys and unedited JSON values/types. Parameter count must never cause deletion or migration of backup data.
 - Before a requested update, check the live FMS branch HEAD and compare complete menu order, group hierarchy, labels, descriptions, controls, bounds, defaults, choices, vehicle conditions and catalog. Record the source SHA and increment the app version only for an actual demo change.
 - Before publishing, check public files for private data and verify schema/source equality, HTML JavaScript syntax, changed-file whitespace, Pages response and Release asset parity. Do not call rendered or phone behavior verified without observing it.
@@ -22,3 +24,4 @@
 - This demo does not contact a Comma device. Online update checks query only public GitHub Release metadata.
 - The original demo's local uncommitted v1.0.6 driver monitoring work was not copied into this repository.
 - No automatic schedule belongs to this FMS demo.
+- JavaScript syntax, exact source schema equality, Git whitespace, and publication parity were checked. Rendered UI and physical phone behavior were not checked in this delivery.
