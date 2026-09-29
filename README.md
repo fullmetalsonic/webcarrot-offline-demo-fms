@@ -1,4 +1,4 @@
-# WebCarrot FMS 오프라인 데모 v1.0.0 | WebCarrot FMS Offline Demo v1.0.0
+# WebCarrot FMS 오프라인 데모 v1.0.1 | WebCarrot FMS Offline Demo v1.0.1
 
 [데모 실행 · Open demo](https://fullmetalsonic.github.io/webcarrot-offline-demo-fms/) · [오프라인 HTML 다운로드 · Download HTML](https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/latest/download/webcarrot-offline-demo-fms.html) · [소스 브랜치 · Source branch](https://github.com/fullmetalsonic/openpilot/tree/fms-carrot-wip)
 
@@ -18,6 +18,8 @@
 
 **동기화 정책:** 이 FMS 데모는 사용자가 요청할 때만 `fms-carrot-wip`과 대조·갱신합니다. 브랜치 변경을 자동으로 가져오거나 주간 배포하지 않습니다.
 
+v1.0.1에서는 검색 결과를 갱신할 때 입력창을 유지해 휴대폰 한글 조합이 끊기던 문제를 수정했습니다. 일부 모바일 브라우저에서 겹쳐 보이던 검색어 삭제 버튼도 하나로 정리했습니다.
+
 ## English
 
 This separate offline demo follows the settings menu in **`fullmetalsonic/openpilot:fms-carrot-wip`** at commit [`0a3d206b`](https://github.com/fullmetalsonic/openpilot/commit/0a3d206b9b89eafe3d502b9ba5e596e89ad7885a). Its releases and update check are independent from the demo based on the official `ajouatom/carrot-wip` branch.
@@ -33,6 +35,8 @@ This version embeds **184 settings**. It includes the FMS branch’s `PaddleMode
 Open the hosted demo or download its standalone HTML for offline use. It does not connect to a device or directly apply vehicle settings. Restore an exported backup on the Comma device to apply it. The online update check only queries the public GitHub Releases API; backups are not uploaded.
 
 **Sync policy:** This FMS demo is compared with and updated from `fms-carrot-wip` only when the owner requests it. Branch changes are not imported or deployed on a schedule.
+
+v1.0.1 keeps the search input mounted while results update, so Korean IME composition is not interrupted. It also removes the duplicate clear button shown by some mobile browsers.
 
 ## License
 

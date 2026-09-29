@@ -13,6 +13,7 @@
 - `index.html` is the standalone offline app and the Pages root.
 - Release asset `webcarrot-offline-demo-fms.html` must be byte-identical to `index.html`.
 - App version starts at `1.0.0`, independently of the official-source demo. The in-app update check points only to the FMS repository.
+- v1.0.1 changes only search input behavior: keep the input DOM node while updating results, defer the first category-to-search transition during IME composition, and use one custom clear button. Embedded settings and source SHA remain unchanged.
 - Published v1.0.0 at `https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/tag/v1.0.0`; Pages is `https://fullmetalsonic.github.io/webcarrot-offline-demo-fms/`.
 - At publication, Pages and the Release HTML both returned HTTP 200 and matched local `index.html` byte for byte (SHA-256 `26a5c2a7a313502e3b20e57a98bcc74424b5d27f94c7c5bf2637a9e528492890`). The latest stable Release API returned v1.0.0 with CORS `*`.
 - Preserve unknown imported keys and unedited JSON values/types. Parameter count must never cause deletion or migration of backup data.
