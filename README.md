@@ -1,4 +1,4 @@
-# WebCarrot FMS 오프라인 데모 v1.0.3 | WebCarrot FMS Offline Demo v1.0.3
+# WebCarrot FMS 오프라인 데모 v1.0.4 | WebCarrot FMS Offline Demo v1.0.4
 
 [데모 실행 · Open demo](https://fullmetalsonic.github.io/webcarrot-offline-demo-fms/) · [오프라인 HTML 다운로드 · Download HTML](https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/latest/download/webcarrot-offline-demo-fms.html) · [소스 브랜치 · Source branch](https://github.com/fullmetalsonic/openpilot/tree/fms-carrot-wip)
 
@@ -24,6 +24,8 @@ v1.0.2에서는 “스티어링”과 “스테어링” 검색어도 원본 메
 
 v1.0.3에서는 최신 FMS 설정 정의와 상세·검색 전용·차량별 표시 규칙을 반영하고, Pages에서 업데이트할 때 설정을 보관하는 경로를 수정했습니다.
 
+v1.0.4에서는 숫자 설정 98개의 조절을 원본 웹캐럿과 맞췄습니다. 배율은 `x1 → x2 → x5 → x10 → x50 → x100`으로 순환하며, 선택한 숫자만큼 정확히 증가·감소합니다. 범위가 좁은 설정 5개에도 배율 버튼을 표시하고, 직접 입력은 배율과 별개로 범위 안의 정수를 1 단위로 입력할 수 있습니다. FMS 설정 정의와 차량 목록은 그대로입니다.
+
 ## English
 
 This separate offline demo follows the settings menu in **`fullmetalsonic/openpilot:fms-carrot-wip`** at commit [`1b1e019`](https://github.com/fullmetalsonic/openpilot/commit/1b1e019ee6bf5778be751373f269ed4f5d874cf2). Its releases and update check are independent from the demo based on the official `ajouatom/carrot-wip` branch.
@@ -45,6 +47,8 @@ v1.0.1 keeps the search input mounted while results update, so Korean IME compos
 v1.0.2 also maps Korean “스티어링/스테어링” searches to the source menu’s “조향” and `Steer` entries.
 
 v1.0.3 updates the FMS definitions and detail, search-only, and vehicle-brand visibility rules. It also fixes the hosted update path that carries the current settings into the new Pages version.
+
+v1.0.4 matches the source WebCarrot controls for all 98 numeric settings. Increments cycle through `x1 → x2 → x5 → x10 → x50 → x100`, and each selected number is the actual increment or decrement. Five narrow-range settings regain their increment buttons. Direct entry accepts in-range integers at a step of 1, independently of the selected increment. FMS definitions and the vehicle catalog are unchanged.
 
 ## License
 
