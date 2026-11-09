@@ -5,13 +5,36 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-// FMS WebCarrot oracle at fullmetalsonic/openpilot 1b1e019ee6bf5778be751373f269ed4f5d874cf2.
-// The current FMS source e0f14004a52061895eae47d230327bf03f05065c preserves these rules.
-// https://github.com/fullmetalsonic/openpilot/blob/1b1e019ee6bf5778be751373f269ed4f5d874cf2/openpilot/selfdrive/carrot/web/js/shared/constants.js
-// https://github.com/fullmetalsonic/openpilot/blob/1b1e019ee6bf5778be751373f269ed4f5d874cf2/openpilot/selfdrive/carrot/web/src/ui/components/numeric_stepper/numeric_stepper.js
-// UNIT_CYCLE is the actual increment; parameter unit is not multiplied into it.
+// Frozen oracles from openpilot/selfdrive/carrot at this FMS commit.
+const FMS_SHA = '201d3fe45b55389846d0ccfec9524574e74d19c2';
+// web/js/pages/setting.js:781 and web/src/ui/components/numeric_stepper/numeric_stepper.js:18.
+// Official config.py UNIT_CYCLE; this is the actual increment, not p.unit times it.
 const EXPECTED_STEPS = [1, 2, 5, 10, 50, 100];
 const SETTING_CONTROL_KINDS = ["toggle", "segmented", "select", "slider"];
+// Source classification: pinned common/params_keys.h intersected with the FMS settings schema.
+const NATIVE_INT_KEYS = ["AChangeCostStarting", "AdjustLaneOffset", "AlwaysLateral", "ApplyModelSpeed", "AutoBlinkerControl", "AutoCruiseControl", "AutoCurveSpeedFactor", "AutoCurveSpeedLowerLimit", "AutoEngage", "AutoGasCancelSpeed", "AutoGasSyncSpeed", "AutoGasTokSpeed", "AutoNaviCountDownMode", "AutoNaviRearCameraHoldDistance", "AutoNaviSpeedBumpEndDistance", "AutoNaviSpeedBumpSpeed", "AutoNaviSpeedBumpTime", "AutoNaviSpeedCtrlEnd", "AutoNaviSpeedCtrlMode", "AutoNaviSpeedDecelRate", "AutoNaviSpeedSafetyFactor", "AutoRoadSpeedAdjust", "AutoRoadSpeedLimitOffset", "AutoSpeedUptoRoadSpeedLimit", "AutoTurnControl", "AutoTurnControlRightLaneChange", "AutoTurnControlSpeedTurn", "AutoTurnControlTurnEnd", "AutoTurnMapChange", "BlinkerLatchedTurn", "CameraYawTrimDeg", "CancelButtonMode", "CanfdBlinkerTest", "CanfdDebug", "CanfdHDA2", "CarrotCruiseAtcDecel", "CarrotCruiseDecel", "CarrotTireTrajectory", "CenterToFrontRatio", "ClusterHud", "ClusterHudBrightness", "ClusterHudCameraViewMode", "ClusterHudDebug", "ClusterHudEncoder", "ClusterHudMirror", "ClusterHudOrientation", "ClusterHudPanelLayout", "ClusterHudRadarDisplay", "ClusterHudRadarInfo", "ClusterHudRadarSourceColor", "ClusterHudScreenMode", "ClusterHudTheme", "ClusterNaviMapFps", "ClusterNaviMapTheme", "ClusterNaviMapType", "CommaPedalEnabled", "CruiseButtonLongDelay", "CruiseButtonMode", "CruiseButtonTest1", "CruiseButtonTest2", "CruiseButtonTest3", "CruiseCoastingPercent", "CruiseEcoControl", "CruiseGapLevels", "CruiseMaxVals0", "CruiseMaxVals1", "CruiseMaxVals2", "CruiseMaxVals3", "CruiseMaxVals4", "CruiseMaxVals5", "CruiseMaxVals6", "CruiseOnDist", "CruiseSpeed1", "CruiseSpeed2", "CruiseSpeed3", "CruiseSpeed4", "CruiseSpeed5", "CruiseSpeedUnit", "CruiseSpeedUnitBasic", "CustomSR", "CustomSteerDeltaDown", "CustomSteerDeltaDownLC", "CustomSteerDeltaUp", "CustomSteerDeltaUpLC", "CustomSteerMax", "DisableDM", "DisableMinSteerSpeed", "DynamicTFollowLC", "EnableCornerRadar", "EnableRadarTracks", "HDPuse", "HapticFeedbackWhenSpeedCamera", "HardwareC3xLite", "HotspotOnBoot", "HyundaiCameraSCC", "IsLdwsCar", "LaneChangeBsd", "LaneChangeDelay", "LaneChangeNeedTorque", "LaneLineCheck", "LatMpcAccelCost", "LatMpcInputOffset", "LatMpcJerkCost", "LatMpcMotionCost", "LatMpcPathCost", "LatMpcSteeringRateCost", "LatSmoothSec", "LatSuspendAngleDeg", "LateralTorqueAccelFactor", "LateralTorqueCustom", "LateralTorqueFriction", "LateralTorqueKd", "LateralTorqueKf", "LateralTorqueKiV", "LateralTorqueKpV", "LeadAccelResponse", "LeadAccelResponseTF1", "LeadAccelResponseTF2", "LeadAccelResponseTF3", "LeadAccelResponseTF4", "LfaButtonMode", "LongActuatorDelay", "LongTuningKf", "LongTuningKiV", "LongTuningKpV", "MapTurnSpeedFactor", "MapboxStyle", "MaxAngleFrames", "MaxTimeOffroadMin", "MuteDoor", "MuteSeatbelt", "MyDrivingMode", "MyDrivingModeAuto", "NNFF", "OnnxBsdEnabled", "OnnxBsdIntervalMs", "OnnxBsdSmoothingMs", "OnnxBsdThreshold", "OnnxLaneIntervalMs", "OnnxLaneThreshold", "PaddleMode", "PathOffset", "RecordRoadCam", "ShareData", "ShowCameraWithCluster", "ShowCustomBrightness", "ShowDateTime", "ShowDebugUI", "ShowDeviceState", "ShowLaneInfo", "ShowModelView", "ShowPathColor", "ShowPathColorCruiseOff", "ShowPathColorLane", "ShowPathMode", "ShowPathModeLane", "ShowPlotMode", "ShowRadarInfo", "ShowTpms", "SignalAssistMode", "SoftwareMenu", "SoundVolumeAdjust", "SoundVolumeAdjustEngage", "SpeedFromPCM", "SpeedTFFactor", "SteerActuatorDelay", "SteerRatioRate", "StopDistanceCarrot", "StoppingAccel", "TFollowDecelBoost", "TFollowGap1", "TFollowGap2", "TFollowGap3", "TFollowGap4", "TrafficLightDetectMode", "TrafficStopDistanceAdjust", "TurnSpeedControlMode", "UseLaneLineCurveSpeed", "UseLaneLineSpeed", "VEgoStopping", "VehicleNaviCanControl", "VehicleSpeedCameraControlMode", "VehicleSpeedCameraDistanceTime"];
+// Frozen outputs from actual params.py restore_param_values_from_backup/get_param_values at FMS_SHA.
+// The native boundary enforces signed int32; UI direct-entry Math.round is a different stage.
+const INT_RESTORE_CASES = [
+  ['2.5', 2], ['3.5', 4], ['-2.5', -2], ['-3.5', -4], [2.5, 2], [3.5, 4], [-2.5, -2], [-3.5, -4],
+  ['+2.5', 2], ['2.5e0', 2], ['1e1', 10], [true, 1], [false, 0], [2147483647, 2147483647],
+  [-2147483648, -2147483648], ['2147483647', 2147483647], ['-2147483648', -2147483648],
+  [2147483648, null], [-2147483649, null], ['2147483647.4', 2147483647], ['2147483647.5', null],
+  ['-2147483648.5', -2147483648], ['-2147483648.6', null], [null, null], [{}, null], [[4], null],
+  ['', null], [' ', null], ['0x4', null], ['NaN', null], ['1e999', null], ['1_0', 10], ['1_0.5', 10],
+  ['4__0', null], ['4_.0', null], ['4._0', null], ['4e_0', null], ['٤.٥', 4], ['４.５', 4],
+  ['𝟜.𝟝', 4], ['٤e٠', 4], ['\u00854\u0085', 4], ['\u001c4\u001c', null],
+];
+// Official pyproject.toml pins Python >=3.12.3,<3.13: its Unicode 15 decimal blocks, not the browser's version.
+const SOURCE_UNICODE15_ZEROES = [
+  0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66, 0xde6,
+  0xe50, 0xed0, 0xf20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90, 0x1b50,
+  0x1bb0, 0x1c40, 0x1c50, 0xa620, 0xa8d0, 0xa900, 0xa9d0, 0xa9f0, 0xaa50, 0xabf0, 0xff10,
+  0x104a0, 0x10d30, 0x11066, 0x110f0, 0x11136, 0x111d0, 0x112f0, 0x11450, 0x114d0, 0x11650,
+  0x116c0, 0x11730, 0x118e0, 0x11950, 0x11c50, 0x11d50, 0x11da0, 0x11f50, 0x16a60, 0x16ac0,
+  0x16b50, 0x1d7ce, 0x1d7d8, 0x1d7e2, 0x1d7ec, 0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e950, 0x1fbf0,
+];
+const POST_SOURCE_UNICODE_ZEROES = [0x10d40, 0x116d0, 0x11bf0, 0x11de0, 0x16130, 0x16d70, 0x1ccf0, 0x1e5f1];
 
 function getSettingControlConfig(p) {
   // A parameter pins its control with a "control" field in
@@ -65,49 +88,129 @@ function nextStepValue(options = {}) {
   return next;
 }
 
+// web/js/pages/setting.js:846. Server examples in server/tests/test_settings_schema.py
+// independently pin 1 -> 31 and 30 -> 31.
+function normalizeSettingNumericValue(raw, p, previous = null) {
+  const text = String(raw).trim();
+  if (!text || !Number.isFinite(Number(text))) return null;
+  const min = Number(p.min);
+  const max = Number(p.max);
+  let next = Math.max(min, Math.min(max, Number(text)));
+  if (Number.isInteger(min) && Number.isInteger(max)) next = Math.round(next);
+  const nonzeroMin = Number(p.nonzero_min);
+  if (next > 0 && next < nonzeroMin) {
+    next = previous !== null && next < previous ? 0 : nonzeroMin;
+  }
+  return next;
+}
 
 
-function loadDemo() {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+function loadDemo({ storage = new Map(), storageBlocked = false, storageFailure = {}, session = new Map(), sessionFailure = {}, hosted = false, search = '', href, startup: executeStartup = false, navEntries = [], deferHistoryBack = false } = {}) {
+  const html = fs.readFileSync(process.env.WEBCARROT_TEST_HTML || path.join(__dirname, '..', 'index.html'), 'utf8');
   const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const startup = 'state.backup=defaultBackup();restorePendingUpdate();render();initNavHistory();checkForUpdate();';
+  const currentStartup = 'initializeBackup();render();initNavHistory();checkForUpdate();';
+  const previousStartup = 'state.backup=defaultBackup();restorePendingUpdate();render();initNavHistory();checkForUpdate();';
+  const startup = script.includes(currentStartup) ? currentStartup : previousStartup;
   assert.equal(script.split(startup).length, 2, 'Only browser startup is suppressed');
-  const nodes = new Map(), listeners = new Map();
+  const nodes = new Map(), listeners = new Map(), timers = new Map();
+  const confirmations = [], downloads = [], navigations = [];
+  let confirmAnswer = true, now = 1000, timerId = 0;
   let exportedBlob;
+  function listen(owner, type, listener) {
+    const key = `${owner}:${type}`;
+    if (!listeners.has(key)) listeners.set(key, []);
+    listeners.get(key).push(listener);
+  }
+  function schedule(callback, delay) {
+    timers.set(++timerId, { callback, time: now + delay });
+    return timerId;
+  }
+  function advance(ms) {
+    const end = now + ms;
+    while (timers.size) {
+      const [id, timer] = [...timers].sort((a, b) => a[1].time - b[1].time)[0];
+      if (timer.time > end) break;
+      now = timer.time;
+      timers.delete(id);
+      timer.callback();
+    }
+    now = end;
+  }
   function element(id = '') {
     if (nodes.has(id)) return nodes.get(id);
     const node = {
-      id, hidden: true, textContent: '', innerHTML: '', value: '', style: {}, dataset: {},
-      addEventListener() {}, setAttribute() {}, focus() {}, querySelector() { return element('query-' + id); },
-      closest() { return element("closest-" + id); }, querySelectorAll() { return []; }, insertAdjacentHTML() {}, classList: { toggle() {} }, click() {}, remove() {},
+      id, hidden: true, disabled: false, textContent: '', innerHTML: '', value: '', style: {}, dataset: {}, isConnected: true,
+      addEventListener(type, listener) { listen(id, type, listener); },
+      setAttribute() {}, focus() {}, querySelector() { return element('query-' + id); },
+      closest() { return element('closest-' + id); },
+      querySelectorAll() { return []; }, insertAdjacentHTML() {}, classList: { toggle() {}, add() {}, remove() {} },
+      click() { if (this.download) downloads.push({ name: this.download, blob: exportedBlob }); }, remove() {},
     };
     nodes.set(id, node);
     return node;
   }
   const document = {
-    addEventListener(type, listener) {
-      if (!listeners.has(type)) listeners.set(type, []);
-      listeners.get(type).push(listener);
-    },
+    addEventListener(type, listener) { listen('document', type, listener); },
     getElementById: element, querySelectorAll() { return []; },
     createElement() { return element('download'); }, body: { style: {}, append() {} },
   };
   class TestURL extends URL {}
   TestURL.createObjectURL = blob => { exportedBlob = blob; return 'blob:step-test'; };
   TestURL.revokeObjectURL = () => {};
+  class TestDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  }
+  const localStorage = {
+    getItem(key) { if (storageBlocked || storageFailure.readKeys?.includes(key)) throw new Error('storage blocked'); return storage.get(key) ?? null; },
+    setItem(key, value) { if (storageBlocked || storageFailure.writeKeys?.includes(key)) throw new Error('storage blocked'); storage.set(key, String(value)); },
+    removeItem(key) { if (storageBlocked || storageFailure.removeKeys?.includes(key)) throw new Error('storage blocked'); storage.delete(key); },
+  };
+  const sessionStorage = {
+    getItem(key) { if (sessionFailure.read || sessionFailure.readKeys?.includes(key)) throw new Error('session read blocked'); return session.get(key) ?? null; },
+    setItem(key, value) { if (sessionFailure.write || sessionFailure.writeKeys?.includes(key)) throw new Error('session quota exceeded'); session.set(key, String(value)); },
+    removeItem(key) { if (sessionFailure.remove || sessionFailure.removeKeys?.includes(key)) throw new Error('session removal blocked'); session.delete(key); },
+  };
+  const location = new TestURL(href || ((hosted ? 'https://fullmetalsonic.github.io/webcarrot-offline-demo-fms/' : 'https://example.invalid/') + search));
+  location.assign = url => navigations.push(url);
+  const historyEntries = structuredClone(navEntries), historyURLs = [];
+  function updateHistoryURL(url) {
+    if (url === undefined || url === null) return;
+    location.href = new URL(url, location.href).href;
+    historyURLs.push(location.href);
+  }
+  const pendingHistoryBacks = [];
+  const completeHistoryBack = () => { if(historyEntries.length < 2)return;historyEntries.pop();dispatch('popstate',null,{state:history.state},'window'); };
+  const history = {
+    get state() { return historyEntries.at(-1); },
+    pushState(entry, title, url) { historyEntries.push(entry); updateHistoryURL(url); },
+    replaceState(entry, title, url) { if (historyEntries.length) historyEntries.pop(); historyEntries.push(entry); updateHistoryURL(url); },
+    back() {
+      if(deferHistoryBack)pendingHistoryBacks.push(completeHistoryBack);else completeHistoryBack();
+    },
+    go(delta) { while (delta++ < 0 && historyEntries.length > 1) historyEntries.pop(); dispatch('popstate', null, { state: this.state }, 'window'); },
+  };
   const context = vm.createContext({
-    document, Blob, URL: TestURL, setTimeout() {}, clearTimeout() {}, confirm() { return true; },
-    history: { pushState() {}, replaceState() {}, go() {}, back() {} },
-    location: { origin: 'https://example.invalid', pathname: '/' },
-    window: { addEventListener() {}, scrollTo() {} },
+    document, Blob, URL: TestURL, Date: TestDate, localStorage, sessionStorage, AbortController, crypto: require('node:crypto').webcrypto,
+    fetch: async () => ({ ok: true, json: async () => ({ tag_name: 'v1.0.0', assets: [] }) }),
+    setTimeout: schedule, clearTimeout: id => timers.delete(id),
+    confirm(message) { confirmations.push(message); return confirmAnswer; },
+    history,
+    location,
+    window: { localStorage, sessionStorage, addEventListener(type, listener) { listen('window', type, listener); }, scrollTo() {} },
   });
-  vm.runInContext(script.replace(startup, ''), context);
+  vm.runInContext(executeStartup ? script : script.replace(startup, ''), context);
   const run = source => vm.runInContext(source, context);
-  run("state.backup=defaultBackup();state.tab='drive'");
+  if (!executeStartup) run((startup === currentStartup ? 'initializeBackup()' : 'state.backup=defaultBackup();restorePendingUpdate()')+";state.tab='drive';initNavHistory()");
   const params = JSON.parse(run('JSON.stringify(PARAMS)'));
   const numeric = params.filter(p => p.name !== 'SoundLanguageSetting' && getSettingControlConfig(p).kind === 'slider');
-  function dispatch(type, target) { for (const listener of listeners.get(type) || []) listener({ target }); }
-  const click = dataset => dispatch('click', { closest() { return { dataset }; } });
+  function dispatch(type, target, data = {}, owner = 'document') {
+    const event = { target, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, ...data };
+    event.completion = Promise.all((listeners.get(`${owner}:${type}`) || []).map(listener => listener(event)));
+    return event;
+  }
+  const button = dataset => ({ dataset, closest() { return this; }, classList: { add() {}, remove() {} } });
+  const click = (dataset, data = {}) => dispatch('click', button(dataset), { detail: 0, ...data });
   const control = p => run(`settingControl(BY_NAME.get(${JSON.stringify(p.name)}))`);
   const card = p => run(`settingCard(BY_NAME.get(${JSON.stringify(p.name)}))`);
   function setRaw(name, value) { run(`state.backup[${JSON.stringify(name)}]=${JSON.stringify(String(value))}`); }
@@ -125,8 +228,32 @@ function loadDemo() {
     assert.equal(values.length, 2, p.name + ': two step buttons for a valid value');
     click({ step: p.name, delta: String(values[sign > 0 ? 1 : 0]) });
   }
-  return { context, run, params, numeric, element, dispatch, click, control, card, setRaw, selectStep, press,
-    exported: async () => JSON.parse(await exportedBlob.text()) };
+  const param = name => params.find(p => p.name === name);
+  function chooseFile(file) {
+    const input = element('fileInput');
+    input.files = file ? [file] : [];
+    input.value = file?.name || '';
+    return dispatch('change', input, {}, 'fileInput').completion;
+  }
+  async function importText(text, name = 'fixture.json') {
+    await chooseFile({ name, text: async () => text });
+  }
+  async function exportedText() {
+    const before = downloads.length;
+    click({ action: 'export' });
+    assert.equal(downloads.length, before + 1, 'export action creates one actual Blob download');
+    return downloads.at(-1).blob.text();
+  }
+  function direct(p, value) {
+    click({ edit: p.name });
+    const input = element('choiceNumber');
+    input.value = String(value);
+    dispatch('click', element('choiceApply'), {}, 'choiceApply');
+  }
+  return { run, params, numeric, element, dispatch, click, button, advance, confirmations, downloads, navigations, pendingHistoryBacks, session, sessionFailure, storageFailure, historyEntries, historyURLs, location, param,
+    control, card, setRaw, selectStep, press, direct, chooseFile, importText, exportedText,
+    importJson: fixture => importText(JSON.stringify(fixture)), confirmAnswer(value) { confirmAnswer = value; },
+    async exported() { return JSON.parse(await exportedText()); } };
 }
 
 function validInitial(p) {
@@ -160,7 +287,8 @@ test('Production +/- clicks match the official oracle for every numeric row, fac
           const deltas = [...demo.control(p).matchAll(/data-delta="([^"]+)"/g)].map(match => Number(match[1]));
           assert.deepEqual(deltas, [-factor, factor], p.name + ': label is the actual increment');
           demo.press(p, sign);
-          const expected = nextStepValue({ current, fallback: p.default, step: factor, sign, min: p.min, max: p.max });
+          const stepped = nextStepValue({ current, fallback: p.default, step: factor, sign, min: p.min, max: p.max });
+          const expected = normalizeSettingNumericValue(stepped, p, current);
           assert.equal(demo.run(`Number(state.backup[${JSON.stringify(p.name)}])`), expected,
             `${p.name} x${factor} ${current} ${sign > 0 ? '+' : '-'}`);
         }
@@ -169,24 +297,273 @@ test('Production +/- clicks match the official oracle for every numeric row, fac
   }
 });
 
-test('Numeric dialogs accept non-unit-multiple integers while preserving range and integer validation', () => {
+test('Numeric text dialogs normalize finite input and leave invalid input unchanged on every numeric row', () => {
   const demo = loadDemo();
   for (const p of demo.numeric) {
     demo.setRaw(p.name, validInitial(p));
     demo.selectStep(p, 50);
-    demo.run(`openChoice(${JSON.stringify(p.name)})`);
+    demo.click({ edit: p.name });
     const body = demo.element('choiceBody').innerHTML;
-    assert.deepEqual([...body.matchAll(/step="([^"]+)"/g)].map(match => match[1]), ['1', '1'], p.name);
-    const value = p.min + 1;
-    demo.element('choiceNumber').value = String(value);
-    demo.run('applyChoice()');
-    assert.equal(demo.run(`Number(state.backup[${JSON.stringify(p.name)}])`), value, p.name + ': direct integer');
-    for (const invalid of ['', 'NaN', String(p.min - 1), String(p.max + 1), String(value + 0.5)]) {
-      demo.run(`openChoice(${JSON.stringify(p.name)})`);
-      demo.element('choiceNumber').value = invalid;
-      demo.run('applyChoice()');
-      assert.equal(demo.run(`Number(state.backup[${JSON.stringify(p.name)}])`), value, p.name + ': rejects ' + invalid);
+    assert.match(body, /<input\b[^>]*\btype="text"/);
+    assert.doesNotMatch(body, /type="range"/);
+    demo.run('closeChoice()');
+    const read = () => demo.run(`state.backup[${JSON.stringify(p.name)}]`);
+    for (const value of [p.min + 1, p.min - 1, p.max + 1, p.min + 0.6]) {
+      demo.direct(p, value);
+      assert.equal(read(), String(normalizeSettingNumericValue(value, p)), `${p.name}: direct ${value}`);
     }
+    const previous = read();
+    const dirty = demo.run('state.dirty.size');
+    for (const invalid of ['', ' ', 'NaN', 'Infinity', '12x']) {
+      demo.direct(p, invalid);
+      assert.equal(read(), previous, `${p.name}: rejects ${JSON.stringify(invalid)}`);
+      assert.equal(demo.run('state.dirty.size'), dirty);
+      assert.equal(demo.element('choiceOverlay').hidden, true);
+    }
+  }
+});
+
+test('Center of gravity ratio matches fixed upstream gap boundaries and explicit-entry examples', async () => {
+  const demo = loadDemo(), p = demo.params.find(p => p.name === 'CenterToFrontRatio');
+  assert.deepEqual([p.min, p.nonzero_min, p.max, p.default], [0, 31, 69, 0]);
+  // Fixed expectations also check the frozen oracle rather than deriving every
+  // expectation from the same normalization algorithm as production.
+  for (const [factor, upFromZero, downFromMax] of [[1, 31, 68], [2, 31, 67], [5, 31, 64], [10, 31, 59], [50, 50, 0], [100, 69, 0]]) {
+    demo.selectStep(p, factor);
+    for (const [current, sign, expected] of [[0, 1, upFromZero], [0, -1, 0], [31, -1, 0], [69, -1, downFromMax], [69, 1, 69]]) {
+      demo.setRaw(p.name, current);
+      demo.press(p, sign);
+      assert.equal(demo.run('Number(state.backup.CenterToFrontRatio)'), expected, `${current} ${sign} x${factor}`);
+    }
+  }
+  demo.selectStep(p, 10);
+  demo.setRaw(p.name, 40);
+  demo.press(p, -1);
+  assert.equal(demo.run('state.backup.CenterToFrontRatio'), '0', '40 - 10 skips the forbidden gap to zero');
+  for (let value = 1; value <= 30; value++) {
+    demo.direct(p, value);
+    assert.equal(demo.run('state.backup.CenterToFrontRatio'), '31', `direct ${value} -> 31`);
+    demo.dispatch('change', { dataset: { raw: p.name }, value: String(value) });
+    assert.equal(demo.run('state.backup.CenterToFrontRatio'), '31', `raw ${value} -> 31`);
+  }
+  for (const value of [0, 31, 40, 60, 69]) {
+    demo.direct(p, value);
+    assert.equal(demo.run('state.backup.CenterToFrontRatio'), String(value));
+  }
+  demo.click({ default: p.name });
+  assert.equal(demo.run('state.backup.CenterToFrontRatio'), '0');
+  assert.ok(demo.control(p).includes('0 · 차량 기본'));
+  assert.ok(demo.card(p).includes('default=0 · 차량 기본'));
+  assert.equal((await demo.exported()).CenterToFrontRatio, '0');
+});
+
+test('Imported gap values stay byte-for-value intact until an explicit edit', async () => {
+  const demo = loadDemo(), p = demo.params.find(p => p.name === 'CenterToFrontRatio');
+  for (let value = 1; value <= 30; value++) {
+    for (const raw of [value, String(value)]) {
+      const backup = { CenterToFrontRatio: raw, CenterToFrontRatioEnabled: true, DisableDM: { nested: [false, null] }, FutureUnknown: ['kept'] };
+      await demo.importJson(backup);
+      demo.selectStep(p, 5);
+      demo.run('openChoice("CenterToFrontRatio");closeChoice()');
+      assert.deepEqual(await demo.exported(), backup);
+      assert.equal(demo.run('state.dirty.size'), 0);
+      demo.press(p, 1);
+      assert.deepEqual(await demo.exported(), { ...backup, CenterToFrontRatio: String(value + 5 < 31 ? 31 : value + 5) });
+    }
+  }
+});
+
+test('ATC distance is a 0–500 numeric row and x1 preserves the official stored value', () => {
+  const demo = loadDemo(), p = demo.param('AutoTurnControlRightLaneChange');
+  assert.deepEqual([p.min, p.max, p.default, p.unit, p.control], [0, 500, 0, 50, 'slider']);
+  assert.match(demo.card(p), /data-mult="AutoTurnControlRightLaneChange">x1/);
+  demo.press(p, 1);
+  // common/atc_params.py maps this stored legacy ON value to 250 metres at runtime.
+  assert.equal(demo.run('state.backup.AutoTurnControlRightLaneChange'), '1');
+  demo.click({ default: p.name });
+  demo.selectStep(p, 50);
+  demo.press(p, 1);
+  assert.equal(demo.run('state.backup.AutoTurnControlRightLaneChange'), '50');
+  demo.direct(p, 901);
+  assert.equal(demo.run('state.backup.AutoTurnControlRightLaneChange'), '500');
+});
+
+test('Numeric steps start at typed restore values; invalid restores retain raw data for explicit repair', async () => {
+  const demo = loadDemo(), p = demo.param('VEgoStopping');
+  for (const [raw, up, down] of [
+    [51.625, 53, 51], ['50.625', 52, 50], ['50.5', 51, 49], [9, 10, 8], ['101', 100, 100],
+    ['legacy', null, null], [null, null, null], [{ unsupported: true }, null, null],
+  ]) {
+    const fixture = { [p.name]: raw, FutureUnknown: { exact: 0.123456789012345, list: [false, null] } };
+    for (const [sign, expected] of [[1, up], [-1, down]]) {
+      await demo.importJson(fixture);
+      assert.deepEqual(await demo.exported(), fixture, 'rendering retains the original JSON value');
+      demo.press(p, sign);
+      if (expected === null) {
+        // Source restore rejects the value; offline mode cannot infer the device's prior value.
+        assert.deepEqual(await demo.exported(), fixture, 'invalid restore never silently steps from a default');
+        assert.match(demo.card(p), /해석|변환|복원|형식|유효/);
+        demo.direct(p, 55);
+        assert.deepEqual(await demo.exported(), { ...fixture, [p.name]: '55' });
+      } else assert.deepEqual(await demo.exported(), { ...fixture, [p.name]: String(expected) }, JSON.stringify(raw));
+    }
+  }
+});
+
+test('Unchanged stored values keep original types; explicit missing-key edits and changed resets are deliberate', async () => {
+  const demo = loadDemo(), p = demo.param('VEgoStopping');
+  const fixture = { VEgoStopping: 50, ClusterHudScreenMode: 0, CanfdHDA2: true, VehicleNaviSchoolZoneControl: 'True' };
+  await demo.importJson(fixture);
+  demo.direct(p, ' 50.1 ');
+  demo.click({ default: p.name });
+  demo.click({ choice: 'ClusterHudScreenMode' });
+  demo.click({ choiceValue: '0' });
+  demo.click({ edit: 'StopDistanceCarrot' });
+  demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+  assert.deepEqual(await demo.exported(), fixture, 'viewing and canceling a missing default does not add it');
+  demo.direct(demo.param('StopDistanceCarrot'), 600);
+  demo.click({ default: 'StopDistanceCarrot' });
+  demo.click({ set: 'CanfdHDA2', value: '1' });
+  demo.click({ set: 'VehicleNaviSchoolZoneControl', value: '1' });
+  const explicit = { ...fixture, StopDistanceCarrot: '600' };
+  assert.deepEqual(await demo.exported(), explicit, 'applying a missing setting writes the requested default');
+  assert.equal(demo.run('state.dirty.size'), 1);
+  assert.equal(demo.confirmations.length, 0);
+  demo.direct(p, 51.6);
+  demo.confirmAnswer(false);
+  demo.click({ default: p.name });
+  assert.deepEqual(await demo.exported(), { ...explicit, VEgoStopping: '52' });
+  assert.equal(demo.confirmations.length, 1);
+  demo.confirmAnswer(true);
+  demo.click({ default: p.name });
+  assert.deepEqual(await demo.exported(), { ...explicit, VEgoStopping: '50' });
+  assert.equal(demo.confirmations.length, 2);
+  demo.click({ set: 'CanfdHDA2', value: '0' });
+  demo.click({ set: 'VehicleNaviSchoolZoneControl', value: '0' });
+  assert.deepEqual(await demo.exported(), { ...explicit, VEgoStopping: '50', CanfdHDA2: '0', VehicleNaviSchoolZoneControl: '0' });
+});
+
+test('Untouched numeric tokens retain precision through import, display and export', async () => {
+  const storage = new Map(), session = new Map();
+  const demo = loadDemo({ storage, session, hosted: true }), p = demo.param('VEgoStopping');
+  const precision = '50.625000000000000000123';
+  const future = '{"count":9007199254740993,"array":[false,1.234567890123456789012345,null]}';
+  await demo.importText(`{"VEgoStopping":${precision},"FutureUnknown":${future}}`);
+  demo.selectStep(p, 5);
+  demo.click({ edit: p.name });
+  demo.run('closeChoice()');
+  const original = await demo.exportedText();
+  assert.match(original, new RegExp(`"VEgoStopping"\\s*:\\s*${precision.replace('.', '\\.')}\\s*,`));
+  assert.match(original, /"count"\s*:\s*9007199254740993\b/);
+  assert.match(original, /\b1\.234567890123456789012345\b/);
+  demo.press(p, 1);
+  const edited = await demo.exportedText();
+  assert.equal(JSON.parse(edited).VEgoStopping, '56');
+  assert.match(edited, /"count"\s*:\s*9007199254740993\b/);
+  assert.match(edited, /\b1\.234567890123456789012345\b/);
+  assert.deepEqual(Object.keys(JSON.parse(edited)), ['VEgoStopping', 'FutureUnknown']);
+  demo.run('storePendingUpdate(DEMO_VERSION)');
+  const reopened = loadDemo({ storage, session, hosted: true });
+  reopened.run('restorePendingUpdate()');
+  assert.equal(await reopened.exportedText(), edited);
+  assert.equal(reopened.run('sessionStorage.getItem(UPDATE_BACKUP_KEY)'), null);
+});
+
+// web/src/ui/components/commit_gesture.js defines the timing and 10px movement tolerance.
+test('Numeric pointer gestures commit on release or repeat at 900/160 ms without an extra click', () => {
+  const demo = loadDemo();
+  const target = demo.button({ step: 'StopDistanceCarrot', delta: '1' });
+  const pointer = (type, options = {}) => demo.dispatch(type, target, { pointerId: 1, button: 0, clientX: 10, clientY: 10, ...options });
+  const echo = () => demo.dispatch('click', target, { detail: 1 });
+  const value = () => demo.run('state.backup.StopDistanceCarrot');
+  assert.ok(!pointer('pointerdown').defaultPrevented, 'pointerdown leaves browser scrolling available');
+  demo.advance(100);
+  assert.equal(value(), '600');
+  pointer('pointerup');
+  assert.equal(value(), '601');
+  echo();
+  assert.equal(value(), '601');
+  pointer('pointerdown');
+  demo.advance(899);
+  assert.equal(value(), '601');
+  demo.advance(1);
+  assert.equal(value(), '602');
+  demo.advance(159);
+  assert.equal(value(), '602');
+  demo.advance(1);
+  assert.equal(value(), '603');
+  demo.advance(160);
+  assert.equal(value(), '604');
+  pointer('pointerup');
+  echo();
+  demo.advance(500);
+  assert.equal(value(), '604');
+  for (const [type, options] of [['pointercancel', {}], ['pointermove', { clientY: 21 }]]) {
+    pointer('pointerdown');
+    demo.advance(100);
+    pointer(type, options);
+    pointer('pointerup');
+    echo();
+    demo.advance(1000);
+    assert.equal(value(), '604', type);
+  }
+  demo.dispatch('click', target, { detail: 0 });
+  assert.equal(value(), '605', 'keyboard activation remains available');
+});
+
+test('Multiplier preferences survive a reload per row and fail open when storage is blocked', async () => {
+  const storage = new Map();
+  const original = loadDemo({ storage }), p = original.param('StopDistanceCarrot');
+  const before = await original.exported();
+  original.selectStep(p, 50);
+  assert.deepEqual(await original.exported(), before);
+  assert.equal(original.run('state.dirty.size'), 0);
+  const reopened = loadDemo({ storage });
+  assert.match(reopened.card(p), /data-mult="StopDistanceCarrot">x50/);
+  assert.match(reopened.card(reopened.param('VEgoStopping')), /data-mult="VEgoStopping">x1/);
+  reopened.press(p, 1);
+  assert.equal(reopened.run('state.backup.StopDistanceCarrot'), '650');
+  const blocked = loadDemo({ storageBlocked: true });
+  blocked.selectStep(p, 5);
+  blocked.press(p, 1);
+  assert.equal(blocked.run('state.backup.StopDistanceCarrot'), '605');
+});
+
+test('Gap levels adapt to vehicle capability while imported and missing values stay intact', async () => {
+  const demo = loadDemo(), p = demo.param('CruiseGapLevels');
+  for (const [fixture, max] of [[{}, 3], [{ LongitudinalPersonalityMax: '3' }, 3],
+    [{ LongitudinalPersonalityMax: '4' }, 4], [{ LongitudinalPersonalityMax: 4 }, 4],
+    [{ LongitudinalPersonalityMax: 'invalid', CruiseGapLevels: 4, TFollowGap4: 175 }, 3]]) {
+    await demo.importJson(fixture);
+    demo.click({ choice: p.name });
+    const choices = [...demo.element('choiceBody').innerHTML.matchAll(/data-choice-value="([^"]+)"/g)].map(match => Number(match[1]));
+    assert.deepEqual(choices, max === 4 ? [2, 3, 4] : [2, 3]);
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.click({ choiceValue: '2' });
+    assert.deepEqual(await demo.exported(), { ...fixture, CruiseGapLevels: '2' });
+    demo.click({ default: p.name });
+    assert.deepEqual(await demo.exported(), { ...fixture, CruiseGapLevels: String(max) });
+  }
+  assert.equal((await loadDemo().exported()).CruiseGapLevels, '3');
+});
+
+test('Hyundai, Kia, Genesis, Toyota and Lexus hide the three brand-restricted settings', async () => {
+  const demo = loadDemo();
+  const names = ['LongTuningKpV', 'LongTuningKf', 'LongTuningKiV'];
+  for (const [car, hidden] of [
+    [{ CarName: 'HYUNDAI TEST FINGERPRINT' }, true], [{ CarName: 'KIA TEST FINGERPRINT' }, true],
+    [{ CarName: 'GENESIS TEST FINGERPRINT' }, true], [{ CarSelected3: 'Toyota RAV4 2023-25' }, true],
+    [{ CarSelected3: 'Lexus RX 2020-22' }, true], [{ CarName: 'Toyota RAV4 2023-25' }, true],
+    [{ CarName: 'TOYOTA UNKNOWN FINGERPRINT' }, false], [{ CarSelected3: 'Ford Escape 2020-22' }, false], [{}, false],
+  ]) {
+    const fixture = { ...car, LongTuningKpV: 199, LongTuningKiV: '017', FutureUnknown: 0.123456789012345 };
+    await demo.importJson(fixture);
+    for (const name of names) {
+      demo.element('searchInput').value = name;
+      demo.dispatch('input', demo.element('searchInput'));
+      assert.equal(demo.element('searchContent').innerHTML.includes(`data-param="${name}"`), !hidden, `${name}: ${JSON.stringify(car)}`);
+    }
+    assert.deepEqual(await demo.exported(), fixture);
   }
 });
 
@@ -197,17 +574,14 @@ test('Cycling and opening a dialog preserve imported keys/types; only explicit e
     CarrotYouTubeQuality: { nested: [false, 6, null] }, CarrotYouTubeTimestamp: 12,
     FutureUnknown: ['untouched'], UntouchedBoolean: true, UntouchedNull: null,
   };
-  demo.context.fixture = backup;
-  await demo.run('importBackup({name:"fixture.json",text:async()=>JSON.stringify(fixture)})');
-  const p = demo.params.find(p => p.name === 'StopDistanceCarrot');
+  await demo.importJson(backup);
+  const p = demo.param('StopDistanceCarrot');
   demo.selectStep(p, 5);
-  demo.run('openChoice("StopDistanceCarrot");exportBackup()');
+  demo.run('openChoice("StopDistanceCarrot")');
   assert.deepEqual(await demo.exported(), backup);
   demo.press(p, 1);
-  demo.run('exportBackup()');
   assert.deepEqual(await demo.exported(), { ...backup, StopDistanceCarrot: '605' });
   demo.click({ default: 'StopDistanceCarrot' });
-  demo.run('exportBackup()');
   assert.deepEqual(await demo.exported(), { ...backup, StopDistanceCarrot: '600' });
 });
 
@@ -226,6 +600,1195 @@ test('Search input remains mounted while filtering and existing choice/toggle ed
   assert.equal(demo.run('state.backup.OnnxBsdEnabled'), '1');
   demo.run('openChoice("ShowModelView")');
   demo.click({ choiceValue: '3' });
-  demo.run('applyChoice()');
   assert.equal(demo.run('state.backup.ShowModelView'), '3');
+});
+
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+function beginImport(demo, name = 'pending.json') {
+  const read = deferred();
+  return { ...read, done: demo.chooseFile({ name, text: () => read.promise }) };
+}
+
+function backupStatus(demo) {
+  return demo.element('backupStatus').innerHTML + demo.run('renderTools()');
+}
+
+const LEGACY_UPDATE_KEY = 'webcarrot-offline-demo-fms:pending-update-backup';
+const TAB_DRAFT_KEY = 'webcarrot-offline-demo-fms:backup-draft:v1';
+const LEGACY_TARGET = 'v1.0.4';
+const TAB_BACKUP_JSON = '{"StopDistanceCarrot":"700","TabOnly":{"keep":9007199254740993}}';
+const TAB_EXPORTED_JSON = '{\n  "StopDistanceCarrot": "700",\n  "TabOnly": {"keep":9007199254740993}\n}\n';
+const LEGACY_BACKUP_JSON = '{ "StopDistanceCarrot": 800, "VEgoStopping": 50.625000000000000000123, "FutureUnknown": { "integer": 9007199254740993, "nested": [false, 1.234567890123456789012345, null, " 001 "] }, "Text": "  spaced  ", "__proto__": {"kept":true} }';
+const LEGACY_EXPORTED_JSON = '{\n  "StopDistanceCarrot": 800,\n  "VEgoStopping": 50.625000000000000000123,\n  "FutureUnknown": { "integer": 9007199254740993, "nested": [false, 1.234567890123456789012345, null, " 001 "] },\n  "Text": "  spaced  ",\n  "__proto__": {"kept":true}\n}\n';
+
+function legacyUpdateFixture({ cleared = false, draft = true, target = LEGACY_TARGET } = {}) {
+  const draftRaw = draft && !cleared ? JSON.stringify({
+    format: 1, id: 'existing-tab-A', revision: 3, sourceName: 'tab A.json', imported: true,
+    sourceRecognized: 1, dirty: ['StopDistanceCarrot'], json: TAB_BACKUP_JSON,
+  }) : null;
+  const legacyRaw = `{ "target": ${JSON.stringify(target)}, "backup": ${LEGACY_BACKUP_JSON} }`;
+  const session = new Map(draftRaw === null ? [] : [[TAB_DRAFT_KEY, draftRaw]]);
+  if (cleared) session.set(LEGACY_UPDATE_KEY, '{"format":1,"cleared":true}');
+  return { session, storage: new Map([[LEGACY_UPDATE_KEY, legacyRaw]]), legacyRaw, draftRaw };
+}
+
+function assertLegacyChoice(demo) {
+  assert.equal(demo.run('state.recoveryBlocked'), true, 'neither backup is selected implicitly');
+  assert.match(demo.element('backupStatus').innerHTML, /data-action="useLegacyUpdate"/);
+  assert.match(demo.element('backupStatus').innerHTML, /data-action="keepTabBackup"/);
+  demo.click({ action: 'export' });
+  assert.equal(demo.downloads.length, 0, 'an unresolved choice never exports a default or stale backup');
+}
+
+test('Legacy update entry with an existing tab draft requires an explicit backup choice', () => {
+  const fixture = legacyUpdateFixture();
+  const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}&keep=1#settings`, startup: true });
+  assertLegacyChoice(demo);
+  assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw, 'conflict detection preserves the complete tab draft');
+  const { id, ...choice } = JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY));
+  assert.equal(typeof id, 'string');
+  assert.ok(id.length > 0, 'the durable conflict has an identity for recovery after cleanup failure');
+  assert.deepEqual(choice, { format: 2, kind: 'legacy-choice', target: LEGACY_TARGET, legacyRaw: fixture.legacyRaw, draftRaw: fixture.draftRaw });
+  assert.equal(demo.location.searchParams.has('version'), false, 'a durable choice consumes the update entry marker');
+  assert.equal(demo.location.searchParams.get('keep'), '1');
+  assert.equal(demo.location.hash, '#settings');
+  demo.click({ set: 'StopDistanceCarrot', value: '999' });
+  demo.click({ default: 'StopDistanceCarrot' });
+  assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw, 'blocked settings actions cannot modify either candidate');
+});
+
+test('Legacy update entry also requires a choice after this tab explicitly started a new demo', () => {
+  const fixture = legacyUpdateFixture({ cleared: true });
+  const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(demo);
+  assert.equal(JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY)).draftRaw, null);
+  assert.equal(fixture.session.has(TAB_DRAFT_KEY), false, 'default previews are never persisted over the legacy candidate');
+});
+
+test('Legacy update selection preserves original raw tokens, nested whitespace and unsupported keys', async () => {
+  const fixture = legacyUpdateFixture();
+  const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(demo);
+  demo.click({ action: 'useLegacyUpdate' });
+  assert.equal(demo.run('state.recoveryBlocked'), false);
+  assert.equal(await demo.exportedText(), LEGACY_EXPORTED_JSON);
+  const pending = fixture.session.get(LEGACY_UPDATE_KEY);
+  assert.ok(pending === undefined || JSON.parse(pending).format === 1 && JSON.parse(pending).cleared === true, 'the saved choice is cleared after the selected draft is saved');
+  assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), LEGACY_EXPORTED_JSON);
+});
+
+test('Legacy update keep-tab selection preserves the complete existing draft and the explicit new-demo choice', async () => {
+  for (const cleared of [false, true]) {
+    const fixture = legacyUpdateFixture({ cleared });
+    const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    assertLegacyChoice(demo);
+    demo.click({ action: 'keepTabBackup' });
+    assert.equal(demo.run('state.recoveryBlocked'), false);
+    const text = await demo.exportedText();
+    if (cleared) {
+      assert.equal(Object.keys(JSON.parse(text)).length, demo.params.length);
+      assert.equal(Object.hasOwn(JSON.parse(text), 'FutureUnknown'), false);
+    } else {
+      const { resolvedUpdate, ...saved } = JSON.parse(fixture.session.get(TAB_DRAFT_KEY)), original = JSON.parse(fixture.draftRaw);
+      assert.deepEqual({ ...saved, json: original.json }, original, 'dataset identity, revision, source and dirty keys stay intact');
+      assert.equal(text, TAB_EXPORTED_JSON, 'original value tokens and nested formatting survive the choice');
+    }
+    assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), text);
+  }
+});
+
+test('Legacy update unresolved selection survives refresh and shared-candidate replacement without crossing tabs', async () => {
+  const fixture = legacyUpdateFixture();
+  const one = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(one);
+  const snapshot = fixture.session.get(LEGACY_UPDATE_KEY);
+  const replacement = '{"target":"v1.0.4","backup":{"StopDistanceCarrot":"950","OtherTab":true}}';
+  fixture.storage.set(LEGACY_UPDATE_KEY, replacement);
+  one.dispatch('pagehide', null, {}, 'window');
+  assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot);
+  assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw);
+  const twoSession = new Map();
+  const two = loadDemo({ storage: fixture.storage, session: twoSession, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assert.deepEqual(await two.exported(), { StopDistanceCarrot: '950', OtherTab: true });
+  fixture.storage.set(LEGACY_UPDATE_KEY, replacement);
+  const refreshed = loadDemo({ ...fixture, hosted: true, href: one.location.href, startup: true });
+  assertLegacyChoice(refreshed);
+  assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot, 'refresh retains the original per-tab snapshot');
+  refreshed.click({ action: 'useLegacyUpdate' });
+  assert.equal(await refreshed.exportedText(), LEGACY_EXPORTED_JSON);
+  assert.equal(fixture.storage.get(LEGACY_UPDATE_KEY), replacement, 'resolving the older snapshot never removes a changed shared handoff');
+  assert.deepEqual(await two.exported(), { StopDistanceCarrot: '950', OtherTab: true });
+});
+
+test('Legacy update records cannot overwrite current drafts on ordinary or mismatched-version reloads', async () => {
+  for (const search of ['', '?version=v1.0.3', '?version=not-a-version']) {
+    const fixture = legacyUpdateFixture();
+    const demo = loadDemo({ ...fixture, hosted: true, search, startup: true });
+    assert.equal(demo.run('state.recoveryBlocked'), false, search);
+    assert.deepEqual(await demo.exported(), JSON.parse(TAB_BACKUP_JSON));
+    assert.equal(fixture.storage.get(LEGACY_UPDATE_KEY), fixture.legacyRaw);
+    assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw);
+  }
+  const fixture = legacyUpdateFixture({ target: 'v1.0.3' });
+  fixture.storage.set(LEGACY_UPDATE_KEY, '{"target":"v1.0.3","backup":[]}');
+  const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assert.equal(demo.run('state.recoveryBlocked'), false, 'a nonmatching handoff is ignored before validating its backup');
+  assert.equal(await demo.exportedText(), TAB_EXPORTED_JSON);
+});
+
+test('Legacy update entry without a competing tab backup restores automatically', async () => {
+  const fixture = legacyUpdateFixture({ draft: false });
+  const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assert.equal(demo.run('state.recoveryBlocked'), false);
+  assert.equal(await demo.exportedText(), LEGACY_EXPORTED_JSON);
+  assert.ok(fixture.session.has(TAB_DRAFT_KEY));
+  assert.equal(demo.location.searchParams.has('version'), false);
+  assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), LEGACY_EXPORTED_JSON);
+});
+
+test('Legacy update unresolved choices can be replaced explicitly by a JSON import or a new demo', async () => {
+  for (const replacement of ['import', 'new']) {
+    const fixture = legacyUpdateFixture();
+    const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    assertLegacyChoice(demo);
+    if (replacement === 'import') await demo.importText('{"StopDistanceCarrot":"720","Recovered":9007199254740993}', 'chosen.json');
+    else demo.click({ action: 'new' });
+    const text = await demo.exportedText();
+    assert.equal(demo.run('state.recoveryBlocked'), false);
+    if (replacement === 'import') assert.match(text, /"Recovered": 9007199254740993/);
+    else assert.equal(Object.keys(JSON.parse(text)).length, demo.params.length);
+    const refreshed = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+    assert.equal(await refreshed.exportedText(), text, replacement + ': deliberate replacement is not followed by an old choice');
+  }
+});
+
+test('Legacy update snapshot storage failures retain both originals and the update URL while blocking defaults', async () => {
+  const fixture = legacyUpdateFixture(), sessionFailure = { write: true };
+  const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assert.equal(demo.run('state.recoveryBlocked'), true);
+  demo.click({ action: 'export' });
+  demo.click({ set: 'StopDistanceCarrot', value: '999' });
+  assert.equal(demo.downloads.length, 0);
+  assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw);
+  assert.equal(fixture.storage.get(LEGACY_UPDATE_KEY), fixture.legacyRaw);
+  assert.equal(demo.location.searchParams.get('version'), LEGACY_TARGET, 'the URL is consumed only after the choice is durable');
+  assert.match(backupStatus(demo), /저장|보관|실패|못/);
+  sessionFailure.write = false;
+  const recovered = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+  assertLegacyChoice(recovered);
+  recovered.click({ action: 'useLegacyUpdate' });
+  assert.equal(await recovered.exportedText(), LEGACY_EXPORTED_JSON);
+});
+
+test('Legacy update selection keeps its durable snapshot when saving the chosen draft fails', async () => {
+  const fixture = legacyUpdateFixture(), sessionFailure = {};
+  const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(demo);
+  const snapshot = fixture.session.get(LEGACY_UPDATE_KEY);
+  sessionFailure.write = true;
+  demo.click({ action: 'useLegacyUpdate' });
+  assert.equal(demo.run('state.recoveryBlocked'), true, 'failed selection remains unresolved');
+  demo.click({ action: 'export' });
+  assert.equal(demo.downloads.length, 0);
+  assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot);
+  assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw);
+  sessionFailure.write = false;
+  const refreshed = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+  assertLegacyChoice(refreshed);
+  refreshed.click({ action: 'useLegacyUpdate' });
+  assert.equal(await refreshed.exportedText(), LEGACY_EXPORTED_JSON);
+});
+
+test('Legacy update conflicts retain a native session handoff through explicit keep-tab selection', async () => {
+  const storage = new Map(), session = new Map();
+  const original = loadDemo({ storage, session, hosted: true, startup: true });
+  await original.importText(TAB_BACKUP_JSON, 'native.json');
+  const text = await original.exportedText();
+  original.run('storePendingUpdate("v1.0.4")');
+  storage.set(LEGACY_UPDATE_KEY, legacyUpdateFixture().legacyRaw);
+  const reopened = loadDemo({ storage, session, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(reopened);
+  reopened.click({ action: 'keepTabBackup' });
+  assert.equal(reopened.run('state.recoveryBlocked'), false);
+  assert.equal(await reopened.exportedText(), text);
+  assert.doesNotMatch(reopened.element('backupStatus').innerHTML, /data-action="useLegacyUpdate"/);
+});
+
+test('Legacy update imports remain resolved when only snapshot-cleanup writes fail', async () => {
+  const fixture = legacyUpdateFixture(), sessionFailure = {};
+  const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(demo);
+  const snapshot = fixture.session.get(LEGACY_UPDATE_KEY);
+  sessionFailure.writeKeys = [LEGACY_UPDATE_KEY];
+  await demo.importText('{"StopDistanceCarrot":"720","ExplicitReplacement":9007199254740993}', 'chosen C.json');
+  const text = await demo.exportedText();
+  assert.match(text, /"ExplicitReplacement": 9007199254740993/);
+  assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot, 'the simulated cleanup write failed');
+  const draft = JSON.parse(fixture.session.get(TAB_DRAFT_KEY));
+  assert.equal(draft.resolvedUpdate, JSON.parse(snapshot).id, 'the saved replacement records which conflict it resolved');
+  const refreshed = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+  assert.equal(refreshed.run('state.recoveryBlocked'), false);
+  assert.equal(await refreshed.exportedText(), text, 'a cleanup failure cannot let the old A/B choice hide imported C');
+});
+
+test('Legacy update markers are consumed after a native handoff so later shared writes cannot reopen a conflict', async () => {
+  const storage = new Map(), session = new Map();
+  const original = loadDemo({ storage, session, hosted: true, startup: true });
+  await original.importText(TAB_BACKUP_JSON, 'native.json');
+  const text = await original.exportedText();
+  original.run('storePendingUpdate("v1.0.4")');
+  const reopened = loadDemo({ storage, session, hosted: true, search: `?version=${LEGACY_TARGET}&keep=native#settings`, startup: true });
+  assert.equal(reopened.run('state.recoveryBlocked'), false);
+  assert.equal(await reopened.exportedText(), text);
+  assert.equal(reopened.location.searchParams.has('version'), false, 'successful native initialization consumes the update entry marker');
+  assert.equal(reopened.location.searchParams.get('keep'), 'native');
+  assert.equal(reopened.location.hash, '#settings');
+  const legacyRaw = legacyUpdateFixture().legacyRaw;
+  storage.set(LEGACY_UPDATE_KEY, legacyRaw);
+  const refreshed = loadDemo({ storage, session, hosted: true, href: reopened.location.href, startup: true });
+  assert.equal(refreshed.run('state.recoveryBlocked'), false);
+  assert.equal(await refreshed.exportedText(), text);
+  assert.equal(storage.get(LEGACY_UPDATE_KEY), legacyRaw, 'an ordinary reload leaves a later shared handoff untouched');
+});
+
+test('Legacy update corrupt choice snapshots can be replaced by an import that remains selected after refresh', async () => {
+  for (const search of ['', `?version=${LEGACY_TARGET}`]) {
+    const fixture = legacyUpdateFixture();
+    fixture.session.set(LEGACY_UPDATE_KEY, JSON.stringify({
+      format: 2, kind: 'legacy-choice', id: 'corrupt-choice', target: LEGACY_TARGET,
+      legacyRaw: '{broken', draftRaw: fixture.draftRaw,
+    }));
+    const demo = loadDemo({ ...fixture, hosted: true, search, startup: true });
+    assert.equal(demo.run('state.recoveryBlocked'), true);
+    demo.click({ action: 'export' });
+    assert.equal(demo.downloads.length, 0);
+    await demo.importText('{"StopDistanceCarrot":"730","ReplacementC":9007199254740993}', 'chosen C.json');
+    const text = await demo.exportedText();
+    assert.match(text, /"ReplacementC": 9007199254740993/);
+    assert.equal(demo.run('state.recoveryBlocked'), false);
+    const refreshed = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+    assert.equal(refreshed.run('state.recoveryBlocked'), false, 'a deliberate import replaces the corrupt choice even on an update landing');
+    assert.equal(await refreshed.exportedText(), text);
+  }
+});
+
+test('Legacy update fresh landings offer the newest candidate while preserving earlier unselected backups', async () => {
+  const fixture = legacyUpdateFixture();
+  const first = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(first);
+  const originalChoice = JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY));
+  const newestRaw = '{"target":"v1.0.4","backup":{"StopDistanceCarrot":"940","NewestC":9007199254740993}}';
+  fixture.storage.set(LEGACY_UPDATE_KEY, newestRaw);
+  const fresh = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}&keep=retry#settings`, startup: true });
+  assertLegacyChoice(fresh);
+  assert.match(fresh.element('backupStatus').innerHTML, /data-action="previousLegacyUpdate:0"/);
+  const choice = JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY));
+  assert.notEqual(choice.id, originalChoice.id, 'a fresh update entry has its own recovery identity');
+  assert.equal(choice.legacyRaw, newestRaw);
+  assert.equal(choice.draftRaw, fixture.draftRaw);
+  assert.deepEqual(choice.previousLegacyRaws, [fixture.legacyRaw]);
+  assert.equal(fresh.location.searchParams.has('version'), false);
+  assert.equal(fresh.location.searchParams.get('keep'), 'retry');
+  assert.equal(fresh.location.hash, '#settings');
+  for (const [action, expected] of [
+    ['useLegacyUpdate', '{\n  "StopDistanceCarrot": "940",\n  "NewestC": 9007199254740993\n}\n'],
+    ['previousLegacyUpdate:0', LEGACY_EXPORTED_JSON],
+    ['keepTabBackup', TAB_EXPORTED_JSON],
+  ]) {
+    const session = new Map(fixture.session), storage = new Map(fixture.storage);
+    const restored = loadDemo({ session, storage, hosted: true, href: fresh.location.href, startup: true });
+    assertLegacyChoice(restored);
+    restored.click({ action });
+    assert.equal(await restored.exportedText(), expected, action);
+    assert.equal(await loadDemo({ session, storage, hosted: true, startup: true }).exportedText(), expected, action + ': the selected candidate survives refresh');
+    if (action !== 'useLegacyUpdate') assert.equal(storage.get(LEGACY_UPDATE_KEY), newestRaw, 'an older selection never removes the newest shared candidate');
+  }
+});
+
+const TRANSITION_BACKUPS = {
+  A: { json: TAB_BACKUP_JSON, text: TAB_EXPORTED_JSON },
+  B: {
+    json: LEGACY_BACKUP_JSON.replace('"StopDistanceCarrot": 800', '"StopDistanceCarrot": "785"').replace('"FutureUnknown"', '"LegacyB"'),
+    text: LEGACY_EXPORTED_JSON.replace('"StopDistanceCarrot": 800', '"StopDistanceCarrot": "785"').replace('"FutureUnknown"', '"LegacyB"'),
+  },
+  C: {
+    json: '{"StopDistanceCarrot":"843","ChosenC":{ "integer":9007199254740993, "nested":[false,1.234567890123456789012345,null,"  C  "] }}',
+    text: '{\n  "StopDistanceCarrot": "843",\n  "ChosenC": { "integer":9007199254740993, "nested":[false,1.234567890123456789012345,null,"  C  "] }\n}\n',
+  },
+  D: {
+    json: '{"StopDistanceCarrot":"915","LatestD":{ "integer":9007199254740997, "nested":[true,9.876543210987654321098765,null,"  D  "] }}',
+    text: '{\n  "StopDistanceCarrot": "915",\n  "LatestD": { "integer":9007199254740997, "nested":[true,9.876543210987654321098765,null,"  D  "] }\n}\n',
+  },
+};
+const transitionLegacyRaw = name => `{"target":"${LEGACY_TARGET}","backup":${TRANSITION_BACKUPS[name].json}}`;
+
+function transitionFixture() {
+  const fixture = legacyUpdateFixture();
+  fixture.legacyRaw = transitionLegacyRaw('B');
+  fixture.storage.set(LEGACY_UPDATE_KEY, fixture.legacyRaw);
+  return fixture;
+}
+
+async function commitTransition(demo, action) {
+  if (action === 'chooseLegacy') demo.click({ action: 'useLegacyUpdate' });
+  else if (action === 'keepTab') demo.click({ action: 'keepTabBackup' });
+  else if (action === 'importC') await demo.importText(TRANSITION_BACKUPS.C.json, 'chosen C.json');
+  else if (action === 'newDemo') demo.click({ action: 'new' });
+  else assert.fail('unknown transition action: ' + action);
+}
+
+function assertTransitionBlocked(demo, message) {
+  assert.equal(demo.run('state.recoveryBlocked'), true, message);
+  const downloads = demo.downloads.length;
+  demo.click({ action: 'export' });
+  assert.equal(demo.downloads.length, downloads, 'blocked recovery cannot export an invented default or stale dataset');
+}
+
+test('Update transition regression: identical legacy bytes never reuse a previously resolved choice', async () => {
+  const fixture = transitionFixture(), sessionFailure = {};
+  const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertLegacyChoice(demo);
+  sessionFailure.writeKeys = [LEGACY_UPDATE_KEY];
+  await commitTransition(demo, 'importC');
+  assert.equal(await demo.exportedText(), TRANSITION_BACKUPS.C.text);
+  assert.equal(JSON.parse(fixture.session.get(TAB_DRAFT_KEY)).json + '\n', TRANSITION_BACKUPS.C.text);
+  sessionFailure.writeKeys = [];
+  fixture.storage.set(LEGACY_UPDATE_KEY, fixture.legacyRaw); // v1.0.16 rewrites the same bytes on a new update request.
+  const fresh = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+  assertTransitionBlocked(fresh, 'a fresh version landing requires a new choice even when B bytes match the old snapshot');
+  fresh.click({ action: 'useLegacyUpdate' });
+  assert.equal(await fresh.exportedText(), TRANSITION_BACKUPS.B.text);
+  assert.equal(Object.hasOwn(await fresh.exported(), 'ChosenC'), false);
+});
+
+test('Update transition matrix preserves committed authority across persistence and next-entry boundaries', async t => {
+  const defaults = await loadDemo({ hosted: true, startup: true }).exportedText();
+  const selected = { chooseLegacy: TRANSITION_BACKUPS.B.text, keepTab: TRANSITION_BACKUPS.A.text, importC: TRANSITION_BACKUPS.C.text, newDemo: defaults };
+  const actions = Object.keys(selected), failures = ['none', 'draftWrite', 'updateCleanupWrite'], nextEntries = ['reload', 'sameLegacy', 'differentLegacy', 'native'];
+  const notApplicable = [];
+  for (const action of actions) for (const failure of failures) for (const next of nextEntries) {
+    const name = `${action} / ${failure} / ${next}`;
+    // New-demo reset writes a cleared marker then removes DRAFT; it never writes DRAFT.
+    if (action === 'newDemo' && failure === 'draftWrite') { notApplicable.push(name); continue; }
+    const durable = action === 'newDemo' ? failure === 'none' : failure !== 'draftWrite';
+    await t.test(name, async () => {
+      const fixture = transitionFixture(), sessionFailure = {};
+      const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+      assertLegacyChoice(demo);
+      const snapshot = fixture.session.get(LEGACY_UPDATE_KEY);
+      if (failure !== 'none') sessionFailure.writeKeys = [failure === 'draftWrite' ? TAB_DRAFT_KEY : LEGACY_UPDATE_KEY];
+      await commitTransition(demo, action);
+      const persistedDraft = fixture.session.get(TAB_DRAFT_KEY) ?? null;
+      if (action !== 'newDemo' && durable) assert.equal(JSON.parse(persistedDraft).json + '\n', selected[action], 'the complete selected bytes reached DRAFT');
+      if (!durable) {
+        assert.equal(persistedDraft, fixture.draftRaw, 'failed persistence preserves the preceding complete tab record');
+        assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot, 'failed persistence preserves both unresolved candidates');
+      }
+      if (failure !== 'none') assert.match(backupStatus(demo), /저장|보관|실패|못/);
+      if (['chooseLegacy', 'keepTab'].includes(action) && failure !== 'none') assertTransitionBlocked(demo, 'a failed selection remains blocked until recovery');
+      else assert.equal(await demo.exportedText(), selected[action], 'a deliberate import/reset remains available in memory');
+      if (next === 'native' && !durable) {
+        demo.run('updateState.latest=DEMO_VERSION;updateState.assetUrl="https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/download/v1.0.5/webcarrot-offline-demo-fms.html"');
+        demo.click({ action: 'applyHostedUpdate' });
+        assert.equal(demo.navigations.length, 0, 'an actual update action cannot navigate while required persistence still fails');
+        assert.equal(fixture.session.get(LEGACY_UPDATE_KEY), snapshot, 'a failed native attempt leaves the complete unresolved handoff intact');
+        if (['chooseLegacy', 'keepTab'].includes(action)) assertTransitionBlocked(demo, 'a failed selection cannot be bypassed through the update button');
+        else assert.equal(await demo.exportedText(), selected[action], 'a refused native handoff retains the explicit in-memory import/reset');
+        return;
+      }
+      sessionFailure.writeKeys = [];
+
+      if (next === 'reload') {
+        const restored = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+        if (durable) assert.equal(await restored.exportedText(), selected[action], 'ordinary reload uses the successful commit even if cleanup failed');
+        else {
+          assertLegacyChoice(restored);
+          assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw);
+        }
+      } else if (next === 'sameLegacy' || next === 'differentLegacy') {
+        const incoming = next === 'sameLegacy' ? 'B' : 'D';
+        fixture.storage.set(LEGACY_UPDATE_KEY, transitionLegacyRaw(incoming));
+        const fresh = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}&matrix=1#backup`, startup: true });
+        assertLegacyChoice(fresh);
+        const choice = JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY));
+        assert.equal(choice.legacyRaw, transitionLegacyRaw(incoming), 'the new request is the primary legacy candidate');
+        assert.equal(choice.draftRaw, action === 'newDemo' && durable ? null : persistedDraft, 'the last complete tab record remains the alternative');
+        assert.equal(fresh.location.searchParams.has('version'), false);
+        assert.equal(fresh.location.searchParams.get('matrix'), '1');
+        assert.equal(fresh.location.hash, '#backup');
+        fresh.click({ action: 'useLegacyUpdate' });
+        assert.equal(await fresh.exportedText(), TRANSITION_BACKUPS[incoming].text);
+      } else {
+        const restored = loadDemo({ ...fixture, hosted: true, href: demo.location.href, startup: true });
+        assert.equal(await restored.exportedText(), selected[action]);
+        fixture.storage.delete(LEGACY_UPDATE_KEY); // Isolate the native handoff from an unrelated global legacy candidate.
+        restored.run('storePendingUpdate(DEMO_VERSION)');
+        fixture.session.delete(TAB_DRAFT_KEY); // Require restoration from the native handoff itself.
+        const native = loadDemo({ ...fixture, hosted: true, search: `?version=${restored.run('DEMO_VERSION')}`, startup: true });
+        assert.equal(await native.exportedText(), selected[action]);
+        assert.equal(native.location.searchParams.has('version'), false);
+      }
+    });
+  }
+  assert.deepEqual(notApplicable, [
+    'newDemo / draftWrite / reload', 'newDemo / draftWrite / sameLegacy', 'newDemo / draftWrite / differentLegacy', 'newDemo / draftWrite / native',
+  ]);
+  t.diagnostic('N/A: 4 new-demo/DRAFT-write injections because reset does not write DRAFT. Its real DRAFT-remove and UPDATE-marker-write failures are tested; no runnable assertion is skipped.');
+});
+
+test('Update transition read and remove boundaries retain recoverable originals', async t => {
+  for (const next of ['reload', 'freshLegacy']) for (const key of [TAB_DRAFT_KEY, LEGACY_UPDATE_KEY]) {
+    await t.test(`${next} / unreadable ${key === TAB_DRAFT_KEY ? 'DRAFT' : 'UPDATE'}`, async () => {
+      const fixture = transitionFixture();
+      const demo = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+      await commitTransition(demo, 'importC');
+      if (next === 'freshLegacy') fixture.storage.set(LEGACY_UPDATE_KEY, fixture.legacyRaw);
+      const sessionBefore = [...fixture.session], storageBefore = [...fixture.storage];
+      const options = { ...fixture, hosted: true, search: next === 'freshLegacy' ? `?version=${LEGACY_TARGET}` : '', startup: true };
+      const blocked = loadDemo({ ...options, sessionFailure: { readKeys: [key] } });
+      assertTransitionBlocked(blocked, 'unreadable authority is never replaced by defaults');
+      assert.deepEqual([...fixture.session], sessionBefore);
+      assert.deepEqual([...fixture.storage], storageBefore);
+      const recovered = loadDemo(options);
+      if (next === 'freshLegacy') { assertLegacyChoice(recovered); recovered.click({ action: 'useLegacyUpdate' }); }
+      assert.equal(await recovered.exportedText(), TRANSITION_BACKUPS[next === 'freshLegacy' ? 'B' : 'C'].text);
+    });
+  }
+  await t.test('native handoff / UPDATE remove failure', async () => {
+    const session = new Map(), demo = loadDemo({ session, hosted: true, startup: true });
+    await demo.importText(TRANSITION_BACKUPS.C.json, 'native C.json');
+    demo.run('storePendingUpdate(DEMO_VERSION)');
+    session.delete(TAB_DRAFT_KEY);
+    const restored = loadDemo({ session, sessionFailure: { removeKeys: [LEGACY_UPDATE_KEY] }, hosted: true, startup: true });
+    assert.equal(await restored.exportedText(), TRANSITION_BACKUPS.C.text);
+    assert.match(backupStatus(restored), /정리|실패|못/);
+    assert.equal(await loadDemo({ session, hosted: true, startup: true }).exportedText(), TRANSITION_BACKUPS.C.text);
+  });
+  await t.test('native handoff / DRAFT write failure', async () => {
+    const session = new Map(), demo = loadDemo({ session, hosted: true, startup: true });
+    await demo.importText(TRANSITION_BACKUPS.C.json, 'native C.json');
+    demo.run('storePendingUpdate(DEMO_VERSION)');
+    session.delete(TAB_DRAFT_KEY);
+    const pending = session.get(LEGACY_UPDATE_KEY), search = `?version=${demo.run('DEMO_VERSION')}`;
+    const restored = loadDemo({ session, sessionFailure: { writeKeys: [TAB_DRAFT_KEY] }, hosted: true, search, startup: true });
+    assert.equal(await restored.exportedText(), TRANSITION_BACKUPS.C.text, 'the complete native payload remains available in memory');
+    assert.equal(session.get(LEGACY_UPDATE_KEY), pending, 'a failed draft commit cannot consume the only complete handoff');
+    assert.equal(restored.location.searchParams.has('version'), true);
+    assert.equal(await loadDemo({ session, hosted: true, search, startup: true }).exportedText(), TRANSITION_BACKUPS.C.text);
+  });
+  await t.test('legacy selection / shared UPDATE remove failure', async () => {
+    const fixture = transitionFixture(), storageFailure = { removeKeys: [LEGACY_UPDATE_KEY] };
+    const demo = loadDemo({ ...fixture, storageFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    await commitTransition(demo, 'chooseLegacy');
+    assert.equal(await demo.exportedText(), TRANSITION_BACKUPS.B.text);
+    assert.equal(fixture.storage.get(LEGACY_UPDATE_KEY), fixture.legacyRaw);
+    assert.match(backupStatus(demo), /정리|실패|못/);
+    assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), TRANSITION_BACKUPS.B.text);
+    const fresh = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    assertLegacyChoice(fresh);
+  });
+  await t.test('new demo / DRAFT remove failure', async () => {
+    const fixture = transitionFixture(), sessionFailure = { removeKeys: [TAB_DRAFT_KEY] };
+    const demo = loadDemo({ ...fixture, sessionFailure, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    await commitTransition(demo, 'newDemo');
+    assert.equal(fixture.session.get(TAB_DRAFT_KEY), fixture.draftRaw, 'a failed reset never destroys the prior complete record');
+    assert.match(backupStatus(demo), /메모리|지우지|못/);
+    assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), TRANSITION_BACKUPS.A.text, 'the warning identifies a memory-only reset; ordinary reload recovers the surviving original');
+  });
+});
+
+test('Update transition stale-document commits become the current tab candidate without losing raw data', async t => {
+  // An earlier/resumed document can save a plain draft without marking a later conflict resolved.
+  const v18Persistence = `function draftRecord(){return {format:1,id:state.datasetId,revision:state.revision,sourceName:state.sourceName,imported:state.imported,sourceRecognized:state.sourceRecognized,dirty:[...state.dirty],json:backupJSON()};}
+function persistDraft(){
+ if(state.recoveryBlocked)return false;
+ try{sessionStorage.setItem(DRAFT_STORAGE_KEY,JSON.stringify(draftRecord()));state.draftSaved=true;state.storageWarning='';}
+ catch{state.draftSaved=false;state.storageWarning='이 탭에 임시 저장하지 못했습니다. 현재 메모리에서 편집은 가능하지만 새로고침·탭 닫기 전에 JSON을 내보내세요.';}
+ renderBackupStatus();
+ return state.draftSaved;
+}`;
+  for (const next of ['reload', 'native']) await t.test(next, async () => {
+    const fixture = transitionFixture();
+    const olderDocument = loadDemo({ ...fixture, hosted: true, startup: true });
+    olderDocument.run(v18Persistence);
+    const current = loadDemo({ ...fixture, hosted: true, search: `?version=${LEGACY_TARGET}`, startup: true });
+    assertLegacyChoice(current);
+    await olderDocument.importText(TRANSITION_BACKUPS.D.json, 'latest D.json');
+    olderDocument.click({ set: 'StopDistanceCarrot', value: '916' });
+    const expected = TRANSITION_BACKUPS.D.text.replace('"915"', '"916"');
+    assert.equal(await olderDocument.exportedText(), expected);
+    const committedRaw = fixture.session.get(TAB_DRAFT_KEY);
+    assert.equal(Object.hasOwn(JSON.parse(committedRaw), 'resolvedUpdate'), false, 'the old document cannot mark a new choice resolved');
+    if (next === 'native') olderDocument.run('storePendingUpdate(DEMO_VERSION)');
+    const restored = loadDemo({ ...fixture, hosted: true, search: next === 'native' ? `?version=v${olderDocument.run('DEMO_VERSION')}` : '', startup: true });
+    if (next === 'reload') {
+      assertLegacyChoice(restored);
+      assert.equal(JSON.parse(fixture.session.get(LEGACY_UPDATE_KEY)).draftRaw, committedRaw, 'keep-tab offers the actual current record rather than frozen A');
+      restored.click({ action: 'keepTabBackup' });
+    }
+    assert.equal(await restored.exportedText(), expected);
+    assert.equal(await loadDemo({ ...fixture, hosted: true, startup: true }).exportedText(), expected);
+  });
+});
+
+test('Actual file input commits the last selected file when reads finish in reverse order', async () => {
+  const demo = loadDemo(), first = beginImport(demo, 'A.json'), last = beginImport(demo, 'B.json');
+  last.resolve('{"StopDistanceCarrot":"800","BOnly":true}');
+  await last.done;
+  first.resolve('{"StopDistanceCarrot":"400","AOnly":true}');
+  await first.done;
+  assert.deepEqual(await demo.exported(), { StopDistanceCarrot: '800', BOnly: true });
+  assert.match(demo.element('toast').textContent, /B\.json|내보냄/);
+  assert.equal(demo.element('fileInput').value, '');
+});
+
+test('A failed last selection cannot revive an older in-flight import', async () => {
+  const demo = loadDemo();
+  await demo.importText('{"StopDistanceCarrot":"700","Keep":9007199254740993}', 'committed.json');
+  const before = await demo.exportedText();
+  const old = beginImport(demo, 'A.json'), latest = beginImport(demo, 'B.json');
+  latest.resolve('{broken');
+  await latest.done;
+  old.resolve('{"StopDistanceCarrot":"400","Stale":true}');
+  await old.done;
+  assert.equal(await demo.exportedText(), before);
+  assert.equal(demo.run('state.dirty.size'), 0);
+});
+
+test('An import in progress blocks download, value edits, reset and new-demo actions', async () => {
+  const demo = loadDemo();
+  await demo.importJson({ StopDistanceCarrot: '700', Keep: [true, null] });
+  const pending = beginImport(demo);
+  demo.click({ action: 'export' });
+  assert.equal(demo.downloads.length, 0, 'no download can misrepresent the pending file as loaded');
+  demo.click({ set: 'StopDistanceCarrot', value: '750' });
+  demo.click({ default: 'StopDistanceCarrot' });
+  demo.click({ action: 'new' });
+  assert.equal(demo.run('state.backup.StopDistanceCarrot'), '700');
+  assert.equal(demo.run('state.dirty.size'), 0);
+  pending.resolve('{"StopDistanceCarrot":"800","New":false}');
+  await pending.done;
+  assert.deepEqual(await demo.exported(), { StopDistanceCarrot: '800', New: false });
+});
+
+test('Read failures retain the last committed bytes and display an uncommitted-file warning', async () => {
+  const demo = loadDemo();
+  await demo.importText('{"StopDistanceCarrot":700,"exact":1.234567890123456789}', 'kept.json');
+  const before = await demo.exportedText(), failed = beginImport(demo, 'unreadable.json');
+  failed.reject(new Error('read failed'));
+  await failed.done;
+  assert.match(demo.element('toast').textContent, /실패|불러오지/);
+  assert.equal(await demo.exportedText(), before);
+  const tools = backupStatus(demo);
+  assert.match(tools, /kept\.json/);
+  assert.match(tools, /unreadable\.json/);
+  assert.match(tools, /실패|미반영|불러오지|유지/);
+});
+
+test('Replacing a dataset closes numeric editors and rejects their old history entries', async () => {
+  const demo = loadDemo();
+  await demo.importJson({ StopDistanceCarrot: '600' });
+  demo.click({ edit: 'StopDistanceCarrot' });
+  demo.element('choiceNumber').value = '650';
+  const oldEntry = structuredClone(demo.historyEntries.at(-1));
+  await demo.importJson({ StopDistanceCarrot: '800', NewFile: true });
+  assert.equal(demo.element('choiceOverlay').hidden, true);
+  demo.dispatch('click', demo.element('choiceApply'), {}, 'choiceApply');
+  demo.dispatch('popstate', null, { state: oldEntry }, 'window');
+  assert.equal(demo.element('choiceOverlay').hidden, true, 'history never revives an editor for a different dataset');
+  assert.equal(demo.run('state.choice'), null);
+  assert.deepEqual(await demo.exported(), { StopDistanceCarrot: '800', NewFile: true });
+});
+
+test('Replacing a dataset invalidates the car confirmation and stale update dialog', async () => {
+  const demo = loadDemo({ hosted: true });
+  await demo.importJson({ CarSelected3: 'original car' });
+  demo.click({ action: 'car' });
+  demo.run('chooseCar("Ford Escape 2020-22")');
+  const carEntry = structuredClone(demo.historyEntries.at(-1));
+  demo.run('updateState.latest="99.0.0";updateState.assetUrl="https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/download/v99.0.0/webcarrot-offline-demo-fms.html";renderUpdateDialog()');
+  const updateEntry = structuredClone(demo.historyEntries.at(-1));
+  await demo.importJson({ CarSelected3: 'new car', Keep: true });
+  assert.equal(demo.element('carModal').hidden, true);
+  assert.equal(demo.element('updateOverlay').hidden, true);
+  demo.dispatch('click', demo.element('confirmYes'), {}, 'confirmYes');
+  for (const entry of [carEntry, updateEntry]) demo.dispatch('popstate', null, { state: entry }, 'window');
+  assert.equal(demo.element('carModal').hidden, true);
+  assert.equal(demo.element('updateOverlay').hidden, true);
+  assert.deepEqual(await demo.exported(), { CarSelected3: 'new car', Keep: true });
+});
+
+test('Ordinary refresh restores raw tokens, types, absent keys, large unknown data and explicit edits', async () => {
+  const session = new Map(), demo = loadDemo({ session, startup: true });
+  const payload = 'future'.repeat(12000);
+  const raw = `{"StopDistanceCarrot":700,"VEgoStopping":50.625000000000000000123,"Future":{"integer":9007199254740993,"ratio":1.234567890123456789012345,"nested":[true,false,null," 001 ","${payload}"]},"Null":null,"Toggle":true}`;
+  await demo.importText(raw, '설정 원본.json');
+  demo.click({ set: 'StopDistanceCarrot', value: '750' });
+  const before = await demo.exportedText();
+  demo.dispatch('pagehide', null, {}, 'window');
+  const refreshed = loadDemo({ session, startup: true });
+  assert.equal(await refreshed.exportedText(), before);
+  assert.match(before, /50\.625000000000000000123/);
+  assert.match(before, /9007199254740993/);
+  assert.match(before, /1\.234567890123456789012345/);
+  assert.equal(refreshed.run('state.dirty.has("StopDistanceCarrot")'), true);
+  assert.match(backupStatus(refreshed), /설정 원본\.json/);
+  assert.equal(Object.hasOwn(await refreshed.exported(), 'PathOffset'), false);
+});
+
+test('Session quota failures preserve memory and downloads and warn before leaving', async () => {
+  const sessionFailure = { write: true }, demo = loadDemo({ sessionFailure, startup: true });
+  await demo.importText('{"StopDistanceCarrot":700,"Unknown":9007199254740993}', 'quota.json');
+  demo.click({ set: 'StopDistanceCarrot', value: '750' });
+  assert.match(backupStatus(demo), /저장|보관|복구/);
+  assert.match(backupStatus(demo), /실패|못|불가|초과|차단/);
+  assert.equal((await demo.exported()).StopDistanceCarrot, '750');
+  assert.match(await demo.exportedText(), /9007199254740993/);
+  const leave = demo.dispatch('beforeunload', null, {}, 'window');
+  assert.equal(leave.defaultPrevented, true, 'unsaved in-memory work requests the browser leave warning');
+  sessionFailure.write = false;
+  demo.click({ set: 'StopDistanceCarrot', value: '760' });
+  const refreshed = loadDemo({ session: demo.session, startup: true });
+  assert.equal((await refreshed.exported()).StopDistanceCarrot, '760');
+});
+
+test('Corrupt or unreadable session drafts never silently export defaults and can recover via import or new', async () => {
+  for (const [raw, sessionFailure] of [['{bad', {}], ['null', {}], ['{"format":1,"json":"[]"}', {}], [null, { read: true }]]) {
+    const session = new Map(raw === null ? [] : [['webcarrot-offline-demo-fms:backup-draft:v1', raw]]);
+    const demo = loadDemo({ session, sessionFailure, startup: true });
+    demo.click({ action: 'export' });
+    demo.click({ set: 'StopDistanceCarrot', value: '750' });
+    assert.equal(demo.downloads.length, 0, 'unreadable draft is not silently replaced by an exportable default dataset');
+    assert.match(backupStatus(demo), /복구|손상|읽|확인/);
+    sessionFailure.read = false;
+    await demo.importText('{"StopDistanceCarrot":"720","Recovered":true}', 'recover.json');
+    assert.deepEqual(await demo.exported(), { StopDistanceCarrot: '720', Recovered: true });
+  }
+  const demo = loadDemo({ session: new Map([['webcarrot-offline-demo-fms:backup-draft:v1', '{bad']]), startup: true });
+  demo.click({ action: 'new' });
+  assert.equal(Object.keys(await demo.exported()).length, demo.params.length);
+});
+
+test('A stale tab pagehide cannot replace another tab update handoff or draft', async () => {
+  const storage = new Map(), oneSession = new Map(), twoSession = new Map();
+  const one = loadDemo({ storage, session: oneSession, hosted: true, startup: true });
+  await one.importJson({ StopDistanceCarrot: '700', One: true });
+  one.run('storePendingUpdate("99.0.0")');
+  const two = loadDemo({ storage, session: twoSession, hosted: true, startup: true });
+  await two.importJson({ StopDistanceCarrot: '900', Two: true });
+  two.run('storePendingUpdate("99.0.0")');
+  const sharedBefore = JSON.stringify([...storage]);
+  one.click({ set: 'StopDistanceCarrot', value: '750' });
+  one.dispatch('pagehide', null, {}, 'window');
+  two.dispatch('pagehide', null, {}, 'window');
+  assert.equal(JSON.stringify([...storage]), sharedBefore, 'pagehide does not write to another tab shared handoff');
+  assert.deepEqual(await loadDemo({ storage, session: oneSession, hosted: true, startup: true }).exported(), { StopDistanceCarrot: '750', One: true });
+  assert.deepEqual(await loadDemo({ storage, session: twoSession, hosted: true, startup: true }).exported(), { StopDistanceCarrot: '900', Two: true });
+});
+
+test('Explicit gap correction writes raw 4 to 3 while view and cancel retain the raw value', async () => {
+  const demo = loadDemo();
+  const fixture = { LongitudinalPersonalityMax: '3', CruiseGapLevels: 4, Unknown: null };
+  await demo.importJson(fixture);
+  demo.click({ choice: 'CruiseGapLevels' });
+  demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+  assert.deepEqual(await demo.exported(), fixture);
+  demo.click({ choice: 'CruiseGapLevels' });
+  demo.click({ choiceValue: '3' });
+  assert.deepEqual(await demo.exported(), { ...fixture, CruiseGapLevels: '3' });
+  await demo.importJson(fixture);
+  demo.click({ default: 'CruiseGapLevels' });
+  assert.deepEqual(await demo.exported(), { ...fixture, CruiseGapLevels: '3' });
+});
+
+test('Exports use a distinct FMS source identifier, original filename and collision-free timestamps', async () => {
+  const demo = loadDemo();
+  await demo.importText('{"StopDistanceCarrot":700}', '../원본 설정?.json');
+  await demo.exportedText();
+  await demo.exportedText();
+  const names = demo.downloads.map(item => item.name);
+  assert.notEqual(names[0], names[1], 'same-millisecond exports have distinct filenames');
+  for (const name of names) {
+    assert.match(name, /webcarrot_fms/);
+    assert.ok(name.includes(FMS_SHA.slice(0, 8)));
+    assert.match(name, /원본_설정/);
+    assert.doesNotMatch(name, /[\\/<>:"|?*]/);
+  }
+  assert.match(backupStatus(demo), /\.\.\/원본 설정\?\.json/);
+});
+
+test('Unknown-only flat objects remain valid and wrapper-shaped objects are preserved with a warning', async () => {
+  const demo = loadDemo();
+  const flat = { FutureA: '001', FutureB: 50, FutureC: true, FutureD: null };
+  await demo.importJson(flat);
+  assert.deepEqual(await demo.exported(), flat);
+  for (const wrapper of [{ params: { StopDistanceCarrot: '700' } }, { backup: { StopDistanceCarrot: 700 }, version: 2 }]) {
+    await demo.importJson(wrapper);
+    assert.match(demo.element('toast').textContent + demo.element('backupStatus').innerHTML, /중첩|래퍼|wrapper|구조/);
+    assert.deepEqual(await demo.exported(), wrapper, 'warning never unwraps or discards an unknown object');
+  }
+});
+
+test('New demo and canceled file selection preserve deliberate lifecycle boundaries', async () => {
+  const session = new Map(), demo = loadDemo({ session, startup: true });
+  await demo.importJson({ StopDistanceCarrot: 700, Unknown: 'keep' });
+  const before = await demo.exportedText();
+  await demo.chooseFile(null);
+  assert.equal(await demo.exportedText(), before, 'canceling the native chooser changes nothing');
+  demo.confirmAnswer(false);
+  demo.click({ action: 'new' });
+  assert.equal(await demo.exportedText(), before);
+  demo.confirmAnswer(true);
+  demo.click({ action: 'new' });
+  const defaults = await demo.exportedText();
+  assert.equal(Object.keys(JSON.parse(defaults)).length, demo.params.length);
+  assert.equal(Object.hasOwn(JSON.parse(defaults), 'Unknown'), false);
+  assert.equal(await loadDemo({ session, startup: true }).exportedText(), defaults, 'explicit new demo replaces the saved draft');
+});
+
+test('JSON edge tokens survive actual import events and malformed replacements leave committed data intact', async () => {
+  const demo = loadDemo();
+  const raw = String.raw`{"__proto__":{"kept":true},"constructor":"own","duplicate":1,"duplicate":9007199254740993,"negativeZero":-0,"huge":1e400,"exponent":1.234567890123456789e-300,"escaped":"  \uD55C\uAE00 quotes\" and slash\\ and comma, colon: brace}  ","StopDistanceCarrot":"700"}`;
+  await demo.importText(raw);
+  const before = await demo.exportedText();
+  for (const token of ['9007199254740993', '-0', '1e400', '1.234567890123456789e-300']) assert.ok(before.includes(token), token);
+  assert.equal(Object.hasOwn(JSON.parse(before), '__proto__'), true);
+  assert.equal(JSON.parse(before).constructor, 'own');
+  for (const malformed of ['null', '[]', 'true', '17', '"text"', '{"bad":NaN}', '{"bad":1,}', '{"bad":"unterminated}']) {
+    await demo.importText(malformed, 'invalid.json');
+    assert.match(demo.element('toast').textContent, /실패|불러오지/);
+    assert.equal(await demo.exportedText(), before, malformed);
+  }
+});
+
+test('A pointer gesture in flight cannot edit a newly imported dataset or a new demo', async () => {
+  for (const replacement of ['import', 'new']) {
+    const demo = loadDemo();
+    await demo.importJson({ StopDistanceCarrot: '700', Unknown: true });
+    const target = demo.button({ step: 'StopDistanceCarrot', delta: '1' });
+    demo.dispatch('pointerdown', target, { pointerId: 7, button: 0, clientX: 0, clientY: 0 });
+    if (replacement === 'import') await demo.importJson({ StopDistanceCarrot: '900', Replacement: true });
+    else demo.click({ action: 'new' });
+    const committed = await demo.exportedText();
+    demo.advance(1500);
+    demo.dispatch('pointerup', target, { pointerId: 7 });
+    // Keep the VM target connected to also exercise the dataset guard for an overdue click echo.
+    demo.dispatch('click', target, { detail: 1 });
+    assert.equal(await demo.exportedText(), committed, replacement + ': held timer, release and synthetic click cannot replay an old edit');
+  }
+});
+
+test('Stored BOOL coercion and inferred BOOL controls follow the official restore service without changing raw types', async () => {
+  const demo = loadDemo();
+  // Pinned params-service.py _coerce_bool: string true/1/yes/on, otherwise scalar truthiness.
+  // VehicleNaviSchoolZoneControl and SoftHoldOnCancel are native BOOL; these two display keys infer BOOL.
+  for (const name of ['VehicleNaviSchoolZoneControl', 'SoftHoldOnCancel', 'ShowPathEnd', 'ShowRouteInfo']) {
+    const p = demo.param(name);
+    assert.deepEqual([p.min, p.max], [0, 1]);
+    for (const raw of ['yes', 'ON', 'true', '1', 'false', 'off', '0', 'unexpected', 2, -1, 0, true, false]) {
+      const expected = typeof raw === 'string' ? ['true', '1', 'yes', 'on'].includes(raw.toLowerCase()) : Boolean(raw);
+      const fixture = { [name]: raw, Unknown: { original: true } };
+      await demo.importJson(fixture);
+      assert.match(demo.control(p), new RegExp(`aria-checked="${expected}"`), name + ': ' + JSON.stringify(raw));
+      assert.deepEqual(await demo.exported(), fixture, 'display keeps the original token/type');
+      demo.click({ set: name, value: expected ? '0' : '1' });
+      assert.deepEqual(await demo.exported(), { ...fixture, [name]: expected ? '0' : '1' });
+    }
+  }
+});
+
+test('Native INT binary controls do not present invalid boolean strings as a successfully restored ON value', async () => {
+  const demo = loadDemo(), p = demo.param('CanfdHDA2');
+  // Native INT in pinned common/params_keys.h; official restore int(value) rejects "True"/"yes".
+  for (const raw of ['True', 'yes', 'false', 'legacy', '0x1', '0b1', '']) {
+    const fixture = { CanfdHDA2: raw, Unknown: null };
+    await demo.importJson(fixture);
+    assert.doesNotMatch(demo.control(p), /aria-checked="true"/, raw + ': no misleading ON state');
+    assert.match(demo.card(p), /유효|형식|복원|정수|지원하지/, 'invalid integer backup is visibly marked');
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.click({ set: p.name, value: '1' });
+    assert.deepEqual(await demo.exported(), { ...fixture, CanfdHDA2: '1' });
+  }
+  for (const [raw, restored] of [[0.5, 0], [1.5, 2], [-0.5, 0]]) {
+    const fixture = { CanfdHDA2: raw, Unknown: null };
+    await demo.importJson(fixture);
+    assert.equal(demo.run('controlValue(BY_NAME.get("CanfdHDA2"))'), restored, 'native INT restore rounds ties to even');
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.click({ set: p.name, value: '1' });
+    assert.deepEqual(await demo.exported(), { ...fixture, CanfdHDA2: '1' });
+  }
+});
+
+test('Repeated imports of the same filename clear only the committed dataset edits and chooser cancel keeps a pending read', async () => {
+  const demo = loadDemo();
+  await demo.importText('{"StopDistanceCarrot":700,"First":true}', 'same.json');
+  demo.click({ set: 'StopDistanceCarrot', value: '750' });
+  assert.equal(demo.run('state.dirty.size'), 1);
+  const pending = beginImport(demo, 'same.json');
+  await demo.chooseFile(null);
+  pending.resolve('{"StopDistanceCarrot":800,"Second":true}');
+  await pending.done;
+  assert.deepEqual(await demo.exported(), { StopDistanceCarrot: 800, Second: true });
+  assert.equal(demo.run('state.dirty.size'), 0);
+  await demo.importText('{"StopDistanceCarrot":900,"Third":true}', 'same.json');
+  assert.deepEqual(await demo.exported(), { StopDistanceCarrot: 900, Third: true });
+});
+
+test('Pending import blocks old car confirmation and hosted update navigation without losing the last backup', async () => {
+  const demo = loadDemo({ hosted: true });
+  await demo.importJson({ CarSelected3: 'original car', StopDistanceCarrot: '700' });
+  demo.click({ action: 'car' });
+  demo.run('chooseCar("Ford Escape 2020-22");updateState.latest="99.0.0";updateState.assetUrl="https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/download/v99.0.0/webcarrot-offline-demo-fms.html"');
+  const pending = beginImport(demo);
+  demo.dispatch('click', demo.element('confirmYes'), {}, 'confirmYes');
+  demo.click({ action: 'applyHostedUpdate' });
+  demo.click({ action: 'saveUpdateBackup' });
+  assert.equal(demo.run('state.backup.CarSelected3'), 'original car');
+  assert.equal(demo.navigations.length, 0);
+  assert.equal(demo.downloads.length, 0);
+  pending.resolve('{"CarSelected3":"replacement car"}');
+  await pending.done;
+  assert.deepEqual(await demo.exported(), { CarSelected3: 'replacement car' });
+});
+
+test('Hosted update refuses navigation after storage failure and retains the exportable in-memory data', async () => {
+  const demo = loadDemo({ sessionFailure: { write: true }, hosted: true, startup: true });
+  await demo.importText('{"StopDistanceCarrot":"700","Unknown":9007199254740993}', 'unsaved.json');
+  demo.run('updateState.latest="99.0.0";updateState.assetUrl="https://github.com/fullmetalsonic/webcarrot-offline-demo-fms/releases/download/v99.0.0/webcarrot-offline-demo-fms.html"');
+  demo.click({ action: 'applyHostedUpdate' });
+  assert.equal(demo.navigations.length, 0);
+  assert.match(demo.element('toast').textContent, /못|실패|백업|내보내/);
+  assert.match(await demo.exportedText(), /9007199254740993/);
+});
+
+test('Explicit defaults insert missing keys while viewing and canceled edits leave them absent', async () => {
+  const demo = loadDemo(), fixture = { Unknown: { exact: true } };
+  for (const [name, value] of [['StopDistanceCarrot', '600'], ['CanfdHDA2', '0'], ['ShowModelView', '0'], ['CruiseGapLevels', '3']]) {
+    await demo.importJson(fixture);
+    demo.click({ action: 'detail:' + name });
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.click({ default: name });
+    assert.deepEqual(await demo.exported(), { ...fixture, [name]: value });
+  }
+  await demo.importJson(fixture);
+  demo.click({ set: 'CanfdHDA2', value: '0' });
+  assert.deepEqual(await demo.exported(), { ...fixture, CanfdHDA2: '0' });
+  for (const raw of ['True', '0x1', '']) {
+    await demo.importJson({ CanfdHDA2: raw });
+    demo.click({ set: 'CanfdHDA2', value: '0' });
+    assert.deepEqual(await demo.exported(), { CanfdHDA2: '0' }, 'explicit OFF canonicalizes an invalid stored integer');
+  }
+});
+
+test('Draft metadata corruption is blocked and cleanup failures never destroy restored raw data', async () => {
+  const key = 'webcarrot-offline-demo-fms:backup-draft:v1', session = new Map();
+  const seed = loadDemo({ session, hosted: true, startup: true });
+  await seed.importText('{"StopDistanceCarrot":700,"Unknown":9007199254740993}', 'saved.json');
+  const valid = JSON.parse(session.get(key));
+  for (const patch of [{ format: 2 }, { id: '' }, { revision: -1 }, { sourceName: {} }, { imported: 'yes' },
+    { sourceRecognized: -1 }, { dirty: [1] }, { dirty: ['missing'] }, { json: '{bad' }, { json: '[]' }]) {
+    const corrupt = new Map([[key, JSON.stringify({ ...valid, ...patch })]]);
+    const demo = loadDemo({ session: corrupt, startup: true });
+    demo.click({ action: 'export' });
+    assert.equal(demo.downloads.length, 0, JSON.stringify(patch));
+    assert.match(backupStatus(demo), /손상|확인|복원|차단/);
+  }
+  seed.run('storePendingUpdate(DEMO_VERSION)');
+  session.delete(key); // Exercise the real startup handoff path when no ordinary draft is available.
+  const removeFailure = loadDemo({ session, sessionFailure: { remove: true }, hosted: true, startup: true });
+  assert.match(backupStatus(removeFailure), /정리|실패|못/);
+  assert.match(await removeFailure.exportedText(), /9007199254740993/);
+});
+
+test('All 183 native INT controls display the actual restored readback without normalizing untouched exports', async () => {
+  const demo = loadDemo();
+  assert.equal(NATIVE_INT_KEYS.length, 183);
+  assert.equal(new Set(NATIVE_INT_KEYS).size, 183);
+  assert.equal(INT_RESTORE_CASES.length, 43);
+  for (const [raw, restored] of INT_RESTORE_CASES.filter(([, value]) => value !== null)) {
+    const fixture = { ...Object.fromEntries(NATIVE_INT_KEYS.map(name => [name, raw])), FutureUnknown: ['001', null] };
+    await demo.importJson(fixture);
+    for (const name of NATIVE_INT_KEYS) {
+      assert.ok(demo.param(name), name + ': present in the pinned FMS schema');
+      const expected = name === 'CruiseGapLevels' ? (restored > 0 ? Math.min(3, Math.max(2, restored)) : 3)
+        : name === 'AutoTurnControlRightLaneChange' && restored === 1 ? 250 : restored;
+      assert.equal(demo.run(`controlValue(effectiveParam(BY_NAME.get(${JSON.stringify(name)})))`), expected, name + ': ' + JSON.stringify(raw));
+    }
+    assert.deepEqual(await demo.exported(), fixture, 'display never rewrites imported native INT tokens');
+    assert.equal(demo.run('state.dirty.size'), 0);
+  }
+});
+
+test('Rejected native INT values remain intact with a warning and cannot step from an invented prior value', async () => {
+  const demo = loadDemo();
+  for (const [raw] of INT_RESTORE_CASES.filter(([, value]) => value === null)) {
+    const fixture = { ...Object.fromEntries(NATIVE_INT_KEYS.map(name => [name, raw])), FutureUnknown: true };
+    await demo.importJson(fixture);
+    for (const name of NATIVE_INT_KEYS) {
+      assert.match(demo.card(demo.param(name)), /data-raw-hint[^>]*>[^<]*(?:원본|복원|형식)/, name + ': ' + JSON.stringify(raw));
+    }
+    for (const p of demo.numeric) demo.press(p, 1);
+    assert.deepEqual(await demo.exported(), fixture, 'invalid/overflow input never silently turns into a default plus one');
+    assert.equal(demo.run('state.dirty.size'), 0);
+  }
+});
+
+test('All numeric production clicks step after native typed restore, including ties and JSON booleans', async () => {
+  const demo = loadDemo();
+  for (const p of demo.numeric) {
+    assert.ok(NATIVE_INT_KEYS.includes(p.name), p.name + ': native INT source classification');
+    for (const [raw, restored] of [['2.5', 2], ['3.5', 4], ['-2.5', -2], [true, 1], [false, 0], ['1e1', 10]]) {
+      for (const sign of [-1, 1]) {
+        const fixture = { [p.name]: raw, FutureUnknown: { untouched: true } };
+        await demo.importJson(fixture);
+        const readback = p.name === 'AutoTurnControlRightLaneChange' && restored === 1 ? 250 : restored;
+        const expected = normalizeSettingNumericValue(readback + sign, p, readback);
+        demo.press(p, sign);
+        // A clamped no-op keeps the untouched source token/type, as the preservation contract requires.
+        const after = expected === readback ? fixture : { ...fixture, [p.name]: String(expected) };
+        assert.deepEqual(await demo.exported(), after, p.name + ': ' + JSON.stringify(raw) + ' / ' + sign);
+      }
+    }
+  }
+  const p = demo.param('AutoGasTokSpeed');
+  for (const [raw, expected] of [['2.5', '3'], [true, '2']]) {
+    await demo.importJson({ [p.name]: raw });
+    demo.press(p, 1);
+    assert.deepEqual(await demo.exported(), { [p.name]: expected });
+  }
+  demo.direct(p, '2.5');
+  assert.equal((await demo.exported())[p.name], '3', 'explicit UI numeric entry continues to use Math.round');
+});
+
+test('Vehicle gap capability uses restored native INT readback rather than the raw token spelling', async () => {
+  const demo = loadDemo(), p = demo.param('CruiseGapLevels');
+  for (const [raw, max] of [['4.0', 4], ['4e0', 4], ['4.5', 4], ['3.5', 4], ['+04', 4],
+    ['٤.٥', 4], ['４.５', 4], [4.5, 4], [true, 3], [false, 3], ['4.6', 3], ['4x', 3], [null, 3], [{}, 3], ['2147483648', 3]]) {
+    const fixture = { LongitudinalPersonalityMax: raw, CruiseGapLevels: '4', FutureUnknown: null };
+    await demo.importJson(fixture);
+    const capabilityHint = demo.card(p).match(/<div[^>]*data-capability[^>]*>([\s\S]*?)<\/div>/)?.[1];
+    if (raw === '4x' || raw === null || typeof raw === 'object' || raw === '2147483648') {
+      assert.ok(capabilityHint, JSON.stringify(raw) + ': invalid capability is explicitly marked');
+      assert.match(capabilityHint, /실제 지원 개수는 확인되지/);
+      assert.match(capabilityHint, /3개 메뉴 미리보기/);
+      assert.match(capabilityHint, /원본 값은 유지/);
+    } else assert.equal(capabilityHint, undefined, 'valid native integer capability has no invalid-input warning');
+    demo.click({ choice: p.name });
+    const values = [...demo.element('choiceBody').innerHTML.matchAll(/data-choice-value="([^"]+)"/g)].map(match => Number(match[1]));
+    assert.deepEqual(values, max === 4 ? [2, 3, 4] : [2, 3], JSON.stringify(raw));
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+  }
+  await demo.importJson({ FutureUnknown: true });
+  demo.click({ choice: p.name });
+  assert.deepEqual([...demo.element('choiceBody').innerHTML.matchAll(/data-choice-value="([^"]+)"/g)].map(match => Number(match[1])), [2, 3]);
+  assert.doesNotMatch(demo.card(p), /data-capability/, 'absent capability retains the ordinary three-level default');
+  assert.deepEqual(await demo.exported(), { FutureUnknown: true });
+});
+
+test('Language labels and choice selection trim and match case without normalizing imported JSON', async () => {
+  const demo = loadDemo(), p = demo.param('SoundLanguageSetting');
+  // Pinned setting.js getSoundLanguageSettingOptionLabel and case-insensitive option matching.
+  for (const [raw, code, label] of [[' KO ', 'ko', '한국어'], ['EN', 'en', 'English'], [' zh-chs ', 'zh-CHS', '中文'],
+    [' AuTo ', 'auto', '자동'], ['', 'auto', '자동'], ['   ', 'auto', '자동'], [' future-lang ', null, 'future-lang']]) {
+    const fixture = { SoundLanguageSetting: raw, FutureUnknown: null };
+    await demo.importJson(fixture);
+    assert.ok(demo.control(p).includes(`>${label}</button>`), JSON.stringify(raw));
+    demo.click({ choice: p.name });
+    const active = [...demo.element('choiceBody').innerHTML.matchAll(/class="active" data-choice-value="([^"]+)"/g)].map(match => match[1]);
+    assert.deepEqual(active, code ? [code] : [], JSON.stringify(raw));
+    demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+    assert.deepEqual(await demo.exported(), fixture, 'display and cancel keep the exact source token');
+    demo.click({ choice: p.name });
+    demo.click({ choiceValue: 'en' });
+    assert.deepEqual(await demo.exported(), { ...fixture, SoundLanguageSetting: 'en' }, 'explicit option selection uses the canonical source code');
+  }
+});
+
+test('A captured step release consumes a retargeted native click but permits the next tap and keyboard activation', async () => {
+  for (const pointerType of ['mouse', 'touch']) {
+    const demo = loadDemo(), p = demo.param('CenterToFrontRatio');
+    await demo.importJson({ [p.name]: '31', FutureUnknown: true });
+    const minus = demo.button({ step: p.name, delta: '-1' }), edit = demo.button({ edit: p.name });
+    const pointer = { pointerId: 73, pointerType, button: 0, isPrimary: true, clientX: 120, clientY: 200 };
+    demo.dispatch('pointerdown', minus, pointer);
+    demo.dispatch('pointerup', minus, pointer);
+    assert.equal(demo.run(`state.backup.${p.name}`), '0');
+    // At the observed 768px layout, 31 -> 0 reflows the value button under the release point.
+    demo.dispatch('click', edit, { ...pointer, detail: 1 });
+    assert.equal(demo.run('state.choice'), null, 'the original physical press cannot also open the editor');
+    assert.equal(demo.element('choiceOverlay').hidden, true);
+    demo.dispatch('pointerdown', edit, { ...pointer, pointerId: 74 });
+    demo.dispatch('pointerup', edit, { ...pointer, pointerId: 74 });
+    demo.dispatch('click', edit, { ...pointer, pointerId: 74, detail: 1 });
+    assert.equal(demo.run('state.choice.name'), p.name, 'a fresh physical tap opens the editor');
+    demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+    demo.dispatch('pointerdown', minus, { ...pointer, pointerId: 75 });
+    demo.dispatch('pointerup', minus, { ...pointer, pointerId: 75 });
+    demo.dispatch('click', edit, { detail: 0 });
+    assert.equal(demo.run('state.choice.name'), p.name, 'keyboard activation remains available during echo suppression');
+  }
+});
+
+test('Source Python Unicode 15 keeps all 68 decimal blocks valid without normalizing their raw JSON', async () => {
+  const demo = loadDemo(), p = demo.param('AutoGasTokSpeed'), gap = demo.param('CruiseGapLevels');
+  assert.equal(SOURCE_UNICODE15_ZEROES.length, 68);
+  for (const zero of SOURCE_UNICODE15_ZEROES) {
+    for (let digit = 0; digit <= 9; digit++) {
+      const raw = String.fromCodePoint(zero + digit);
+      assert.equal(demo.run(`parseBackupInteger(${JSON.stringify(raw)})`), digit, 'source decimal U+' + (zero + digit).toString(16));
+    }
+    const raw = String.fromCodePoint(zero + 4) + '.' + String.fromCodePoint(zero + 5);
+    const fixture = { AutoGasTokSpeed: raw, LongitudinalPersonalityMax: raw, CruiseGapLevels: '4', Unknown: true };
+    await demo.importJson(fixture);
+    assert.equal(demo.run('controlValue(BY_NAME.get("AutoGasTokSpeed"))'), 4);
+    assert.doesNotMatch(demo.card(gap), /data-capability/);
+    demo.click({ choice: gap.name });
+    assert.deepEqual([...demo.element('choiceBody').innerHTML.matchAll(/data-choice-value="([^"]+)"/g)].map(match => Number(match[1])), [2, 3, 4]);
+    demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.press(p, 1);
+    assert.deepEqual(await demo.exported(), { ...fixture, AutoGasTokSpeed: '5' });
+  }
+});
+
+test('Future Unicode decimal blocks rejected by the source cannot enable a fourth gap or fabricate a step value', async () => {
+  const demo = loadDemo(), p = demo.param('AutoGasTokSpeed'), gap = demo.param('CruiseGapLevels');
+  assert.equal(POST_SOURCE_UNICODE_ZEROES.length, 8);
+  for (const zero of POST_SOURCE_UNICODE_ZEROES) {
+    for (let digit = 0; digit <= 9; digit++) {
+      const raw = String.fromCodePoint(zero + digit);
+      assert.equal(demo.run(`parseBackupInteger(${JSON.stringify(raw)})`), null, 'source rejects U+' + (zero + digit).toString(16));
+    }
+    const raw = String.fromCodePoint(zero + 4);
+    const fixture = { AutoGasTokSpeed: raw, LongitudinalPersonalityMax: raw, CruiseGapLevels: '4', Unknown: null };
+    await demo.importJson(fixture);
+    const before = await demo.exportedText();
+    assert.match(demo.card(p), /data-raw-hint/);
+    assert.match(demo.card(gap), /data-capability[^>]*>[^<]*실제 지원 개수는 확인되지/);
+    demo.click({ choice: gap.name });
+    assert.deepEqual([...demo.element('choiceBody').innerHTML.matchAll(/data-choice-value="([^"]+)"/g)].map(match => Number(match[1])), [2, 3]);
+    demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+    demo.press(p, 1);
+    demo.press(p, -1);
+    assert.equal(await demo.exportedText(), before, 'invalid source characters remain exact until an explicit valid edit');
+    assert.equal(demo.run('state.dirty.size'), 0);
+  }
+});
+
+test('A closing numeric dialog blocks the next interaction until asynchronous browser Back completes', () => {
+  const demo = loadDemo({ deferHistoryBack: true });
+  const overlay = demo.element('choiceOverlay');
+  demo.direct(demo.param('VEgoStopping'), 51);
+  assert.equal(demo.run('state.backup.VEgoStopping'), '51');
+  assert.equal(demo.run('state.choice'), null);
+  assert.equal(overlay.hidden, false, 'Keep the backdrop up while the prior history entry is pending');
+  demo.dispatch('click', demo.element('choiceCancel'), {}, 'choiceCancel');
+  assert.equal(demo.pendingHistoryBacks.length, 1, 'Repeated close must not enqueue another traversal');
+  demo.pendingHistoryBacks.shift()();
+  assert.equal(overlay.hidden, true);
+  demo.click({ edit: 'StopDistanceCarrot' });
+  assert.equal(demo.run('state.choice.name'), 'StopDistanceCarrot');
+  assert.equal(overlay.hidden, false);
+});
+
+test('FMS-only PaddleMode 4 and DisableDM still commit through their native control kinds', () => {
+  const demo = loadDemo();
+  assert.equal(demo.param('PaddleMode').max, 4);
+  assert.equal(demo.param('DisableDM').max, 2);
+  demo.click({ choice: 'PaddleMode' });
+  assert.match(demo.element('choiceBody').innerHTML, /data-choice-value="4"/);
+  demo.click({ choiceValue: '4' });
+  assert.equal(demo.run('state.backup.PaddleMode'), '4');
+  assert.match(demo.control(demo.param('DisableDM')), /data-set="DisableDM" data-value="2"/);
+  demo.click({ set: 'DisableDM', value: '0' });
+  demo.click({ set: 'DisableDM', value: '2' });
+  assert.equal(demo.run('state.backup.DisableDM'), '2');
+  assert.equal(demo.confirmations.length, 0);
+});
+
+test('FMS ATC imported legacy values use restore readback while explicit edits retain raw UI intent', async () => {
+  const p = loadDemo().param('AutoTurnControlRightLaneChange');
+  for (const raw of [1, '1', true, 'True', ' true ', '1.4']) {
+    const demo = loadDemo();
+    const fixture = { [p.name]: raw, FutureUnknown: { unchanged: true } };
+    await demo.importJson(fixture);
+    assert.equal(demo.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), 250);
+    demo.direct(p, 250);
+    assert.equal(demo.run('state.dirty.size'), 0, 'Applying the restored value preserves the source token');
+    assert.deepEqual(await demo.exported(), fixture);
+    demo.press(p, 1);
+    assert.deepEqual(await demo.exported(), { ...fixture, [p.name]: '251' });
+  }
+  const session = new Map(), demo = loadDemo({ session });
+  await demo.importJson({ [p.name]: '0', CanfdHDA2: 'True' });
+  demo.press(p, 1);
+  assert.equal(demo.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), 1);
+  assert.equal(demo.run('parseBackupInteger(state.backup.CanfdHDA2)'), null, 'Other native INT keys reject boolean strings');
+  const json = await demo.exportedText();
+  assert.equal(JSON.parse(json)[p.name], '1');
+  const reopened = loadDemo({ session, startup: true });
+  assert.equal(reopened.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), 1, 'Dirty UI intent survives draft reload');
+  assert.equal(await reopened.exportedText(), json);
+  await reopened.importText(json);
+  assert.equal(reopened.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), 250, 'Export then import follows FMS file restore again');
+  for (const raw of [false, 'False', ' false ']) {
+    await reopened.importJson({ [p.name]: raw });
+    assert.equal(reopened.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), 0);
+    assert.deepEqual(await reopened.exported(), { [p.name]: raw });
+  }
+});
+
+test('BOOL and legacy ATC backup strings use Python strip while native INT and UI language retain their source rules', async () => {
+  const demo = loadDemo(), atc = demo.param('AutoTurnControlRightLaneChange');
+  const wrappers = ['\u0009', '\u000d', '\u001c', '\u001f', '\u0020', '\u0085', '\u00a0', '\u1680', '\u2000', '\u200a', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000'];
+  for (const space of [...wrappers, '\ufeff']) {
+    const raw = space + 'TrUe' + space;
+    const expected = space === '\ufeff' ? 0 : 1;
+    const fixture = { SoftHoldOnCancel: raw, ShowPathEnd: raw, CanfdHDA2: raw, [atc.name]: raw };
+    await demo.importJson(fixture);
+    for (const name of ['SoftHoldOnCancel', 'ShowPathEnd']) {
+      assert.equal(demo.run(`controlValue(BY_NAME.get(${JSON.stringify(name)}))`), expected, name + ' U+' + space.codePointAt(0).toString(16));
+    }
+    assert.equal(demo.run('parseBackupInteger(state.backup.CanfdHDA2)'), null);
+    assert.equal(demo.run('controlValue(BY_NAME.get("AutoTurnControlRightLaneChange"))'), expected ? 250 : raw);
+    assert.deepEqual(await demo.exported(), fixture);
+  }
+  assert.equal(demo.run('parseBackupInteger("\\u001c4\\u001c")'), null, 'Python float does not use all str.strip controls');
+  assert.equal(demo.run('parseBackupInteger("\\u00854\\u0085")'), 4);
+  await demo.importJson({ SoundLanguageSetting: '\ufeffKO\ufeff' });
+  assert.equal(demo.run('controlValue(BY_NAME.get("SoundLanguageSetting"))'), 'ko', 'Language display follows source JavaScript trim');
+});
+
+test('Native and inferred BOOL containers follow Python truthiness without rewriting their tokens or accepting native INT containers', async () => {
+  const demo = loadDemo();
+  for (const [token, expected] of [
+    ['[]', false], ['{}', false], ['[0]', true], ['[null]', true], ['{"x":0}', true],
+    ['{ "nested": [9007199254740993, 1.234567890123456789012345] }', true],
+  ]) {
+    const fixture = `{"SoftHoldOnCancel":${token},"ShowPathEnd":${token},"CanfdHDA2":${token},"FutureUnknown":${token}}`;
+    await demo.importText(fixture);
+    for (const name of ['SoftHoldOnCancel', 'ShowPathEnd']) {
+      assert.match(demo.control(demo.param(name)), new RegExp(`aria-checked="${expected}"`));
+      demo.click({ set: name, value: expected ? '1' : '0' });
+    }
+    assert.equal(demo.run('parseBackupInteger(state.backup.CanfdHDA2)'), null);
+    assert.match(demo.card(demo.param('CanfdHDA2')), /data-raw-hint/);
+    assert.equal(demo.run('state.dirty.size'), 0, 'Choosing the effective BOOL value keeps the original container');
+    const original = await demo.exportedText();
+    for (const name of ['SoftHoldOnCancel', 'ShowPathEnd', 'CanfdHDA2', 'FutureUnknown']) {
+      assert.ok(original.includes(`"${name}": ${token}`), name + ': exact container token');
+    }
+    demo.click({ set: 'SoftHoldOnCancel', value: expected ? '0' : '1' });
+    const edited = await demo.exportedText();
+    assert.equal(JSON.parse(edited).SoftHoldOnCancel, expected ? '0' : '1');
+    for (const name of ['ShowPathEnd', 'CanfdHDA2', 'FutureUnknown']) {
+      assert.ok(edited.includes(`"${name}": ${token}`), name + ': untouched container after another key edit');
+    }
+  }
 });
